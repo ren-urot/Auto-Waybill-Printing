@@ -88,5 +88,12 @@ describe('syncShopifyOrders', () => {
 
     expect(result.failed).toBe(true);
     expect(result.error).toContain('rate limited');
+
+    const [updatedStore] = await testDb
+      .select()
+      .from(schema.stores)
+      .where(eq(schema.stores.id, store.id));
+    expect(updatedStore.status).toBe('error');
+    expect(updatedStore.lastError).toContain('rate limited');
   });
 });
