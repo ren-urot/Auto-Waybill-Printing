@@ -1090,9 +1090,13 @@ export function mergeOrderUpdate(
 ): NewOrderRow {
   const derivedStatus = mapShopifyStatus(shopifyOrder);
   const derivedIsTerminal = derivedStatus === 'cancelled' || derivedStatus === 'shipped';
-  const status =
-    existing && LOCAL_ADVANCED_STATUSES.includes(existing.status) && !derivedIsTerminal
-      ? existing.status
+  // existing.status is plain `string` (see ExistingOrder above); cast to OrderStatus
+  // here since LOCAL_ADVANCED_STATUSES.includes() and the NewOrderRow.status field
+  // both require the narrower union type. No runtime change — tsc/next build reject
+  // the uncast version even though vitest's esbuild transform doesn't catch it.
+  const status: OrderStatus =
+    existing && LOCAL_ADVANCED_STATUSES.includes(existing.status as OrderStatus) && !derivedIsTerminal
+      ? (existing.status as OrderStatus)
       : derivedStatus;
 
   const fulfillment = shopifyOrder.fulfillments?.[0];
