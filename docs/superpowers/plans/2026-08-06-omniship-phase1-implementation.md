@@ -540,7 +540,7 @@ git commit -m "feat: add AES-256-GCM encryption for Shopify access tokens"
 **Files:**
 - Create: `src/lib/supabase/server.ts`, `src/lib/supabase/client.ts`
 - Create: `src/app/login/page.tsx`
-- Create: `middleware.ts`
+- Create: `proxy.ts` (Next.js 16's renamed `middleware.ts` convention — see Step 5)
 - Modify: `.env.example` (add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
 
 **Interfaces:**
@@ -659,14 +659,16 @@ export default function LoginPage() {
 }
 ```
 
-- [ ] **Step 5: Add session-refresh + route-protection middleware**
+- [ ] **Step 5: Add session-refresh + route-protection proxy (Next.js 16's renamed middleware)**
+
+Next.js 16 deprecated the `middleware.ts` file convention and renamed it to `proxy.ts` (file name and exported function name both change; behavior is identical). A `middleware.ts` with `export function middleware()` builds without error but **never executes** on Next.js 16 — use `proxy.ts` with `export function proxy()`.
 
 ```ts
-// middleware.ts
+// proxy.ts
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -708,13 +710,13 @@ export const config = {
 
 - [ ] **Step 6: Manual verification**
 
-Run: `npm run dev`, visit `/`. Expected: redirected to `/login` (no Supabase project configured yet is fine — the redirect logic itself is what's being verified structurally; full sign-in is verified once a real Supabase project is connected, per the Open Prerequisites in the design spec).
+Run: `npm run dev`, visit `/`. Expected: redirected to `/login` (no Supabase project configured yet is fine — the redirect logic itself is what's being verified structurally; full sign-in is verified once a real Supabase project is connected, per the Open Prerequisites in the design spec). Confirm the redirect actually happens — an unredirected 200 means the proxy isn't running (e.g. wrong file name/export for the installed Next.js version) and must be fixed before moving on, since every later authenticated page/route depends on this.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add -A
-git commit -m "feat: add Supabase auth login page and session middleware"
+git commit -m "feat: add Supabase auth login page and session proxy"
 ```
 
 ---
