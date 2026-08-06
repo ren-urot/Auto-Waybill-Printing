@@ -1252,6 +1252,13 @@ describe('syncShopifyOrders', () => {
 
     expect(result.failed).toBe(true);
     expect(result.error).toContain('rate limited');
+
+    const [updatedStore] = await testDb
+      .select()
+      .from(schema.stores)
+      .where(eq(schema.stores.id, store.id));
+    expect(updatedStore.status).toBe('error');
+    expect(updatedStore.lastError).toContain('rate limited');
   });
 });
 ```
@@ -1265,7 +1272,7 @@ Expected: FAIL — `Cannot find module './sync'`.
 
 ```ts
 // src/lib/shopify/sync.ts
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db as defaultDb } from '@/db/client';
 import { stores, orders } from '@/db/schema';
 import { fetchShopifyOrders as defaultFetchOrders, type ShopifyOrder } from './client';
@@ -1299,7 +1306,7 @@ export async function upsertOrderFromShopify(
   const [existing] = await db
     .select({ status: orders.status })
     .from(orders)
-    .where(eq(orders.platformOrderId, platformOrderId));
+    .where(and(eq(orders.storeId, storeId), eq(orders.platformOrderId, platformOrderId)));
 
   const merged = mergeOrderUpdate(existing ?? null, shopifyOrder, storeId);
 
