@@ -540,7 +540,7 @@ git commit -m "feat: add AES-256-GCM encryption for Shopify access tokens"
 **Files:**
 - Create: `src/lib/supabase/server.ts`, `src/lib/supabase/client.ts`
 - Create: `src/app/login/page.tsx`
-- Create: `proxy.ts` (Next.js 16's renamed `middleware.ts` convention — see Step 5)
+- Create: `src/proxy.ts` (Next.js 16's renamed `middleware.ts` convention — see Step 5)
 - Modify: `.env.example` (add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
 
 **Interfaces:**
@@ -661,10 +661,10 @@ export default function LoginPage() {
 
 - [ ] **Step 5: Add session-refresh + route-protection proxy (Next.js 16's renamed middleware)**
 
-Next.js 16 deprecated the `middleware.ts` file convention and renamed it to `proxy.ts` (file name and exported function name both change; behavior is identical). A `middleware.ts` with `export function middleware()` builds without error but **never executes** on Next.js 16 — use `proxy.ts` with `export function proxy()`.
+Next.js 16 deprecated the `middleware.ts` file convention and renamed it to `proxy.ts` (file name and exported function name both change; behavior is identical). A `middleware.ts` with `export function middleware()` builds without error but **never executes** on Next.js 16 — use `proxy.ts` with `export function proxy()`. For a project using the `src/app` layout (this project, since Task 1), the file must live at **`src/proxy.ts`**, not the project root — a root-level `proxy.ts` builds silently but is never registered or invoked for `src`-layout projects on this Next.js version.
 
 ```ts
-// proxy.ts
+// src/proxy.ts
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
