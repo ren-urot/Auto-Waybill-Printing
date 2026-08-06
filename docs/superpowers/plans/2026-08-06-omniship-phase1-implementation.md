@@ -52,7 +52,7 @@ npm install -D drizzle-kit vitest @vitejs/plugin-react jsdom @testing-library/re
 Create `vitest.config.ts`:
 
 ```ts
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 
@@ -62,6 +62,10 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
+    // *.integration.test.ts files hit a real Postgres and run via the
+    // separate `test:integration` config (Task 12) — excluded here so
+    // plain `npm test` stays fast, deterministic, and DB-independent.
+    exclude: [...configDefaults.exclude, '**/*.integration.test.ts'],
   },
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
@@ -1879,6 +1883,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['**/*.integration.test.ts'],
+    // Integration test files share one Postgres DB and truncate the same
+    // tables in beforeEach — running files in parallel races them against
+    // each other. Force serial execution across files.
+    fileParallelism: false,
   },
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
