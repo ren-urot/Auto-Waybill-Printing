@@ -1144,7 +1144,7 @@ git commit -m "feat: add Shopify API client and order merge logic"
 
 **Interfaces:**
 - Consumes: `fetchShopifyOrders` (Task 7 `client.ts`), `mergeOrderUpdate` (Task 7 `merge.ts`), `decryptToken` (Task 4), `db`/`stores`/`orders` (Task 3).
-- Produces: `syncShopifyOrders(storeId: string, deps?: Partial<SyncDeps>): Promise<SyncResult>` where `SyncResult = { synced: number; failed: boolean; error?: string }` — used by Task 9 (cron), Task 10 (webhook), and this task's manual route.
+- Produces: `syncShopifyOrders(storeId: string, deps?: Partial<SyncDeps>): Promise<SyncResult>` where `SyncResult = { synced: number; failed: boolean; error?: string }` — used by Task 9 (cron) and this task's manual route. Also produces `upsertOrderFromShopify(db: SyncDeps['db'], storeId: string, shopifyOrder: ShopifyOrder): Promise<void>` — the single shared "look up existing order, merge, upsert" routine, used by `syncShopifyOrders` itself and by Task 10's webhook route (so that logic exists in exactly one place).
 
 - [ ] **Step 1: Start the test database**
 
@@ -1262,7 +1262,7 @@ Expected: FAIL — `Cannot find module './sync'`.
 import { eq } from 'drizzle-orm';
 import { db as defaultDb } from '@/db/client';
 import { stores, orders } from '@/db/schema';
-import { fetchShopifyOrders as defaultFetchOrders } from './client';
+import { fetchShopifyOrders as defaultFetchOrders, type ShopifyOrder } from './client';
 import { mergeOrderUpdate } from './merge';
 import { decryptToken as defaultDecrypt } from '@/lib/crypto';
 
@@ -1276,6 +1276,34 @@ export interface SyncDeps {
   db: typeof defaultDb;
   fetchOrders: typeof defaultFetchOrders;
   decrypt: typeof defaultDecrypt;
+}
+
+/**
+ * Looks up the existing order by (storeId, platformOrderId), merges it with
+ * the incoming Shopify payload via mergeOrderUpdate, and upserts the result.
+ * Shared by syncShopifyOrders (below) and the webhook route (Task 10) so the
+ * upsert logic exists in exactly one place.
+ */
+export async function upsertOrderFromShopify(
+  db: SyncDeps['db'],
+  storeId: string,
+  shopifyOrder: ShopifyOrder
+): Promise<void> {
+  const platformOrderId = String(shopifyOrder.id);
+  const [existing] = await db
+    .select({ status: orders.status })
+    .from(orders)
+    .where(eq(orders.platformOrderId, platformOrderId));
+
+  const merged = mergeOrderUpdate(existing ?? null, shopifyOrder, storeId);
+
+  await db
+    .insert(orders)
+    .values(merged)
+    .onConflictDoUpdate({
+      target: [orders.storeId, orders.platformOrderId],
+      set: { ...merged, syncedAt: new Date() },
+    });
 }
 
 export async function syncShopifyOrders(storeId: string, overrides: Partial<SyncDeps> = {}): Promise<SyncResult> {
@@ -1296,24 +1324,8 @@ export async function syncShopifyOrders(storeId: string, overrides: Partial<Sync
     const updatedAtMin = store.lastSyncedAt ? store.lastSyncedAt.toISOString() : undefined;
     const shopifyOrders = await fetchOrders(store.shopDomain, accessToken, updatedAtMin);
 
-    let synced = 0;
     for (const shopifyOrder of shopifyOrders) {
-      const platformOrderId = String(shopifyOrder.id);
-      const [existing] = await db
-        .select({ status: orders.status })
-        .from(orders)
-        .where(eq(orders.platformOrderId, platformOrderId));
-
-      const merged = mergeOrderUpdate(existing ?? null, shopifyOrder, storeId);
-
-      await db
-        .insert(orders)
-        .values(merged)
-        .onConflictDoUpdate({
-          target: [orders.storeId, orders.platformOrderId],
-          set: { ...merged, syncedAt: new Date() },
-        });
-      synced += 1;
+      await upsertOrderFromShopify(db, storeId, shopifyOrder);
     }
 
     await db
@@ -1321,7 +1333,7 @@ export async function syncShopifyOrders(storeId: string, overrides: Partial<Sync
       .set({ lastSyncedAt: new Date(), status: 'connected', lastError: null })
       .where(eq(stores.id, storeId));
 
-    return { synced, failed: false };
+    return { synced: shopifyOrders.length, failed: false };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown sync error';
     await db.update(stores).set({ status: 'error', lastError: message }).where(eq(stores.id, storeId));
@@ -1478,7 +1490,7 @@ git commit -m "feat: add Vercel Cron sync route with secret auth"
 - Test: `src/app/api/webhooks/shopify/orders/route.integration.test.ts`
 
 **Interfaces:**
-- Consumes: `mergeOrderUpdate` (Task 7), `db`/`orders`/`stores` (Task 3).
+- Consumes: `upsertOrderFromShopify` (Task 8 `sync.ts`), `db`/`stores` (Task 3).
 - Produces: `verifyShopifyWebhook(rawBody: string, hmacHeader: string | null, secret: string): boolean`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1541,9 +1553,9 @@ Expected: 3 tests pass.
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { verifyShopifyWebhook } from '@/lib/shopify/webhook-verify';
-import { mergeOrderUpdate } from '@/lib/shopify/merge';
+import { upsertOrderFromShopify } from '@/lib/shopify/sync';
 import { db } from '@/db/client';
-import { stores, orders } from '@/db/schema';
+import { stores } from '@/db/schema';
 import type { ShopifyOrder } from '@/lib/shopify/client';
 
 export async function POST(request: Request) {
@@ -1564,21 +1576,7 @@ export async function POST(request: Request) {
   }
 
   const shopifyOrder = JSON.parse(rawBody) as ShopifyOrder;
-  const platformOrderId = String(shopifyOrder.id);
-  const [existing] = await db
-    .select({ status: orders.status })
-    .from(orders)
-    .where(eq(orders.platformOrderId, platformOrderId));
-
-  const merged = mergeOrderUpdate(existing ?? null, shopifyOrder, store.id);
-
-  await db
-    .insert(orders)
-    .values(merged)
-    .onConflictDoUpdate({
-      target: [orders.storeId, orders.platformOrderId],
-      set: { ...merged, syncedAt: new Date() },
-    });
+  await upsertOrderFromShopify(db, store.id, shopifyOrder);
 
   return NextResponse.json({ ok: true });
 }
