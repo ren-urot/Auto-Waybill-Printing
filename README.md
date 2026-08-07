@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OmniShip
 
-## Getting Started
+Automated waybill and packing-slip printing for Shopify orders. Next.js (App
+Router) + Supabase Auth/Postgres + Drizzle. Phase 1 covers one Shopify store:
+OAuth connect, order sync (cron + webhook + manual), an order list, and
+browser-based bulk printing.
 
-First, run the development server:
+## Setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Copy `.env.example` to `.env.local` and fill it in. `DATABASE_URL` and
+  `TOKEN_ENCRYPTION_KEY` must be set before anything imports `src/db/client.ts`
+  — it throws at import time if they're missing, so `npm run build` and the
+  test suites need them too.
+- Generate `TOKEN_ENCRYPTION_KEY` with `openssl rand -base64 32`. It encrypts
+  the stored Shopify access token at rest.
+- Apply the schema: `npm run db:migrate` (run it against each environment's
+  database; `npm run db:generate` creates a new migration after a schema edit).
+- `npm run dev` to start the app, `npm test` for unit tests, and
+  `npm run test:integration` for the Postgres-backed tests (they expect a test
+  database on `localhost:5433` — e.g.
+  `docker run --rm -d -e POSTGRES_PASSWORD=test -e POSTGRES_DB=omniship_test -p 5433:5432 postgres:16`,
+  then `npm run db:migrate` pointed at it).
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Shopify app configuration
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create an app in the Shopify Partner dashboard, then set `SHOPIFY_API_KEY`,
+`SHOPIFY_API_SECRET`, and `SHOPIFY_APP_URL` from it. Two things must be
+registered on the Shopify side or the integration silently does nothing:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **OAuth redirect URL** — add `<SHOPIFY_APP_URL>/api/auth/shopify/callback` to
+  the app's allowed redirection URLs. The connect flow starts at
+  `/api/auth/shopify/connect?shop=your-shop.myshopify.com`.
+- **Webhook subscription** — subscribe the `orders/create` and `orders/updated`
+  topics to `<SHOPIFY_APP_URL>/api/webhooks/shopify/orders`. Payloads are
+  HMAC-verified with `SHOPIFY_API_SECRET`; without it set, every webhook is
+  rejected.
 
-## Learn More
+## Scheduled sync
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`vercel.json` schedules `GET /api/cron/sync-shopify`. The route requires
+`Authorization: Bearer $CRON_SECRET` and rejects everything when `CRON_SECRET`
+is unset, so set it in the deployment environment.

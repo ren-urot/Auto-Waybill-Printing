@@ -11,8 +11,17 @@ interface StoreConnectionCardProps {
   error: string | null;
 }
 
+// The OAuth callback only ever redirects with one of these fixed codes now —
+// it no longer leaks raw internal error text into the address bar — so the
+// readable wording lives here instead.
+const ERROR_MESSAGES: Record<string, string> = {
+  oauth_state_mismatch: 'The connection request could not be verified. Please try connecting again.',
+  oauth_exchange_failed: 'Shopify rejected the connection. Please try connecting again.',
+};
+
 export function StoreConnectionCard({ store, error }: StoreConnectionCardProps) {
   const [shop, setShop] = useState('');
+  const errorMessage = error ? (ERROR_MESSAGES[error] ?? 'Could not connect the store. Please try again.') : null;
 
   function connect(shopDomain: string) {
     window.location.href = `/api/auth/shopify/connect?shop=${encodeURIComponent(shopDomain)}`;
@@ -24,7 +33,7 @@ export function StoreConnectionCard({ store, error }: StoreConnectionCardProps) 
         <CardTitle>Shopify Store</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
         {store ? (
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2">

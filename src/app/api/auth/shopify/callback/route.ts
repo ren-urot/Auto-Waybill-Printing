@@ -37,9 +37,11 @@ export async function GET(request: Request) {
       .onConflictDoUpdate({ target: stores.shopDomain, set: values });
     return NextResponse.redirect(new URL('/settings/store?connected=1', request.url));
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.redirect(
-      new URL(`/settings/store?error=${encodeURIComponent(message)}`, request.url)
-    );
+    // The raw error message used to be encoded straight into a client-visible
+    // URL, which could park a connection string or other internals in the
+    // browser address bar (and in any proxy log along the way). Only a fixed
+    // code crosses the boundary; the detail stays server-side.
+    console.error('Shopify OAuth callback failed', err);
+    return NextResponse.redirect(new URL('/settings/store?error=oauth_exchange_failed', request.url));
   }
 }
