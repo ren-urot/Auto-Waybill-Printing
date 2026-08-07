@@ -23,7 +23,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unknown store' }, { status: 404 });
   }
 
-  const shopifyOrder = JSON.parse(rawBody) as ShopifyOrder;
+  let shopifyOrder: ShopifyOrder;
+  try {
+    shopifyOrder = JSON.parse(rawBody) as ShopifyOrder;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  // Shape guard, not a topic registry: other order topics (orders/delete sends
+  // only `{ id }`) can be delivered to this same endpoint. Acknowledge them
+  // with a 200 no-op so Shopify doesn't retry, rather than crashing on a
+  // payload that isn't a full order.
+  if (!Array.isArray(shopifyOrder.line_items)) {
+    return NextResponse.json({ ok: true, skipped: true });
+  }
+
   await upsertOrderFromShopify(db, store.id, shopifyOrder);
 
   return NextResponse.json({ ok: true });

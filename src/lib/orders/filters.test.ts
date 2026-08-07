@@ -24,9 +24,33 @@ describe('parseOrderFilters', () => {
     expect(parseOrderFilters(new URLSearchParams('keyword=   ')).keyword).toBeUndefined();
   });
 
-  it('parses dateFrom and dateTo', () => {
+  it('parses dateFrom and dateTo, and leaves them undefined when absent', () => {
     const filters = parseOrderFilters(new URLSearchParams('dateFrom=2026-08-01&dateTo=2026-08-06'));
     expect(filters.dateFrom).toBe('2026-08-01');
     expect(filters.dateTo).toBe('2026-08-06');
+
+    const empty = parseOrderFilters(new URLSearchParams());
+    expect(empty.dateFrom).toBeUndefined();
+    expect(empty.dateTo).toBeUndefined();
+  });
+
+  it('round-trips full ISO timestamps for dateFrom/dateTo', () => {
+    const from = '2026-08-01T00:00:00.000Z';
+    const to = '2026-08-06T23:59:59.000Z';
+    const params = new URLSearchParams();
+    params.set('dateFrom', from);
+    params.set('dateTo', to);
+    const filters = parseOrderFilters(params);
+    expect(filters.dateFrom).toBe(from);
+    expect(filters.dateTo).toBe(to);
+    // The API route feeds these straight into `new Date(...)`, so they must
+    // survive parsing as something Date can actually read.
+    expect(Number.isNaN(new Date(filters.dateFrom!).getTime())).toBe(false);
+    expect(Number.isNaN(new Date(filters.dateTo!).getTime())).toBe(false);
+  });
+
+  it('ignores a platform param — orders have no platform column to filter on', () => {
+    const filters = parseOrderFilters(new URLSearchParams('platform=shopify'));
+    expect('platform' in filters).toBe(false);
   });
 });

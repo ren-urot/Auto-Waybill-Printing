@@ -1,7 +1,9 @@
 import type { OrderStatus } from '@/lib/shopify/merge';
 
 export interface OrderFilters {
-  platform?: string;
+  // No `platform` filter: `orders` has no platform column (only `stores` does)
+  // and phase 1 supports Shopify only, so parsing one produced a field the
+  // query could never honour — false confidence, not a feature.
   courier?: string;
   status?: OrderStatus;
   paymentMethod?: string;
@@ -20,7 +22,6 @@ export function parseOrderFilters(searchParams: URLSearchParams): OrderFilters {
     : 'newest';
 
   return {
-    platform: searchParams.get('platform') ?? undefined,
     courier: searchParams.get('courier') ?? undefined,
     status: (searchParams.get('status') as OrderStatus | null) ?? undefined,
     paymentMethod: searchParams.get('paymentMethod') ?? undefined,

@@ -17,7 +17,10 @@ export interface ShopifyOrder {
     country?: string;
     phone?: string;
   };
-  line_items: Array<{ sku: string | null; title: string; quantity: number }>;
+  // Optional on purpose: not every Shopify webhook topic that lands on the
+  // orders endpoint carries line items (orders/delete sends just `{ id }`),
+  // and treating it as guaranteed is what made merge/upsert throw.
+  line_items?: Array<{ sku: string | null; title: string; quantity: number }>;
   fulfillments?: Array<{ tracking_number?: string; tracking_company?: string }>;
 }
 

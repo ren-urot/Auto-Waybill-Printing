@@ -12,6 +12,10 @@ export interface SyncResult {
   error?: string;
 }
 
+export interface StoreSyncResult extends SyncResult {
+  storeId: string;
+}
+
 export interface SyncDeps {
   db: typeof defaultDb;
   fetchOrders: typeof defaultFetchOrders;
@@ -84,4 +88,31 @@ export async function syncShopifyOrders(storeId: string, overrides: Partial<Sync
     await db.update(stores).set({ status: 'error', lastError: message }).where(eq(stores.id, storeId));
     return { synced: 0, failed: true, error: message };
   }
+}
+
+/**
+ * Syncs every connected store. Shared verbatim by POST /api/sync/shopify and
+ * GET /api/cron/sync-shopify, which previously each carried their own copy of
+ * this loop.
+ *
+ * Uses allSettled rather than all: syncShopifyOrders normally catches its own
+ * errors, but anything it can't catch (a dropped DB connection while writing
+ * the error state, say) would reject and, under Promise.all, throw away every
+ * other store's result along with it.
+ */
+export async function syncAllStores(overrides: Partial<SyncDeps> = {}): Promise<StoreSyncResult[]> {
+  const db = overrides.db ?? defaultDb;
+  const allStores = await db.select({ id: stores.id }).from(stores);
+
+  const settled = await Promise.allSettled(
+    allStores.map((store) => syncShopifyOrders(store.id, overrides))
+  );
+
+  return settled.map((outcome, index) => {
+    const storeId = allStores[index].id;
+    if (outcome.status === 'fulfilled') {
+      return { storeId, ...outcome.value };
+    }
+    return { storeId, synced: 0, failed: true, error: String(outcome.reason) };
+  });
 }

@@ -57,7 +57,9 @@ export function mergeOrderUpdate(
     customerName,
     phone: shopifyOrder.shipping_address?.phone ?? shopifyOrder.customer?.phone ?? null,
     address: shopifyOrder.shipping_address ?? {},
-    items: shopifyOrder.line_items.map((item) => ({
+    // Guarded: a webhook or a partial Shopify payload can omit line_items
+    // entirely, and an unguarded .map() there took down the whole sync run.
+    items: (shopifyOrder.line_items ?? []).map((item) => ({
       sku: item.sku,
       title: item.title,
       quantity: item.quantity,
@@ -67,7 +69,10 @@ export function mergeOrderUpdate(
     shippingFee: shopifyOrder.total_shipping_price_set?.shop_money?.amount ?? null,
     paymentMethod: shopifyOrder.payment_gateway_names?.[0] ?? null,
     status,
-    notes: shopifyOrder.note,
+    // Explicit null, never undefined: Drizzle drops undefined keys from
+    // onConflictDoUpdate's SET clause, so a note cleared in Shopify would
+    // never have been cleared locally.
+    notes: shopifyOrder.note ?? null,
     rawPayload: shopifyOrder,
   };
 }
