@@ -105,7 +105,7 @@ Notes:
 
 **Key components:** `OrderTable`, `OrderFilters`, `PrintPreviewDocument` (shared by on-screen preview and `/print/[batch]`), `BarcodeBlock`/`QRBlock`, `SyncStatusIndicator`, `StoreConnectionCard`.
 
-**API routes:** `GET/POST /api/orders`, `POST /api/sync/shopify`, `POST /api/cron/sync-shopify` (cron-secret protected), `POST /api/webhooks/shopify/orders` (HMAC-verified), `POST /api/print-history`, `GET/POST /api/settings`, `GET /api/auth/shopify/callback`.
+**API routes:** `GET/POST /api/orders`, `POST /api/sync/shopify`, `GET /api/cron/sync-shopify` (cron-secret protected — GET matches what Vercel Cron actually issues), `POST /api/webhooks/shopify/orders` (HMAC-verified), `POST /api/print-history`, `GET/POST /api/settings`, `GET /api/auth/shopify/callback`.
 
 ## Sync Mechanics
 
