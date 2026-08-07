@@ -2284,6 +2284,8 @@ Expected: 2 tests pass.
 
 - [ ] **Step 5: Implement OrderFilters (client component)**
 
+This project's `src/components/ui/select.tsx` wraps `@base-ui/react`, not Radix — its `onValueChange` is typed `(value: string | null) => void`, not Radix's `(value: string) => void`. The `v ?? ''` in both handlers below accounts for that (an empty selection still clears the param, so behavior is unchanged).
+
 ```tsx
 // src/components/order-filters.tsx
 'use client';
@@ -2315,7 +2317,7 @@ export function OrderFilters() {
         onChange={(e) => updateParam('keyword', e.target.value)}
         className="max-w-xs"
       />
-      <Select defaultValue={searchParams.get('status') ?? ''} onValueChange={(v) => updateParam('status', v)}>
+      <Select defaultValue={searchParams.get('status') ?? ''} onValueChange={(v) => updateParam('status', v ?? '')}>
         <SelectTrigger className="w-40">
           <SelectValue placeholder="Status" />
         </SelectTrigger>
@@ -2327,7 +2329,7 @@ export function OrderFilters() {
           ))}
         </SelectContent>
       </Select>
-      <Select defaultValue={searchParams.get('sort') ?? 'newest'} onValueChange={(v) => updateParam('sort', v)}>
+      <Select defaultValue={searchParams.get('sort') ?? 'newest'} onValueChange={(v) => updateParam('sort', v ?? '')}>
         <SelectTrigger className="w-32">
           <SelectValue placeholder="Sort" />
         </SelectTrigger>
@@ -2346,18 +2348,20 @@ export function OrderFilters() {
 
 - [ ] **Step 6: Build the orders page**
 
+Next.js requires any component that calls `useSearchParams()` to sit inside a `<Suspense>` boundary, or the build fails prerendering with "useSearchParams() should be wrapped in a suspense boundary." The page below is split into an inner `OrdersPageContent` (all the real logic) and a default-exported `OrdersPage` that wraps it in `<Suspense>` — behavior is unchanged, since data fetching still happens client-side via `useEffect` after mount; the Suspense fallback only satisfies the build-time requirement and is effectively never shown.
+
 ```tsx
 // src/app/orders/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 import { OrderFilters } from '@/components/order-filters';
 import { OrderTable, type OrderRow } from '@/components/order-table';
 import { Button } from '@/components/ui/button';
 
-export default function OrdersPage() {
+function OrdersPageContent() {
   const searchParams = useSearchParams();
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -2384,6 +2388,14 @@ export default function OrdersPage() {
       <OrderFilters />
       <OrderTable orders={orders} selected={selected} onSelectionChange={setSelected} />
     </AppShell>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={null}>
+      <OrdersPageContent />
+    </Suspense>
   );
 }
 ```
@@ -2738,15 +2750,17 @@ export async function POST(request: Request) {
 
 - [ ] **Step 3: Implement the print route/page**
 
+As with Task 14's orders page, `useSearchParams()` requires a `<Suspense>` boundary or the build fails prerendering. `useParams()` doesn't have this restriction (it reads the already-known dynamic route segment), only `useSearchParams()` does — the component is split into `PrintBatchPageContent` (the real logic) and a default-exported wrapper.
+
 ```tsx
 // src/app/print/[batch]/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { PrintPreviewDocument, type PaperSize } from '@/components/print-preview-document';
 
-export default function PrintBatchPage() {
+function PrintBatchPageContent() {
   const params = useParams<{ batch: string }>();
   const searchParams = useSearchParams();
   const [orders, setOrders] = useState<any[]>([]);
@@ -2776,6 +2790,14 @@ export default function PrintBatchPage() {
   if (orders.length === 0) return <p className="p-6">Loading…</p>;
 
   return <PrintPreviewDocument orders={orders} paperSize={paperSize} documentType={documentType} />;
+}
+
+export default function PrintBatchPage() {
+  return (
+    <Suspense fallback={null}>
+      <PrintBatchPageContent />
+    </Suspense>
+  );
 }
 ```
 
