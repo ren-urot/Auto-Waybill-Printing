@@ -2096,6 +2096,12 @@ import { orders, stores } from '@/db/schema';
 
 const STATUS_TILES = ['pending', 'ready_to_ship', 'printed', 'shipped', 'cancelled'] as const;
 
+// Without this, Next.js statically prerenders this page at build time and
+// bakes in whatever order counts existed then — every visitor would see
+// stale counts until the next deploy. This is a live dashboard; it must
+// render fresh on every request.
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
   const [store] = await db.select().from(stores).limit(1);
 
