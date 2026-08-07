@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "DATABASE_URL_TEST=postgres://postgres:test@localhost:5433/omniship_test vitest run --config vitest.integration.config.ts",
+    "test:integration": "DATABASE_URL=postgres://postgres:test@localhost:5433/omniship_test DATABASE_URL_TEST=postgres://postgres:test@localhost:5433/omniship_test TOKEN_ENCRYPTION_KEY=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc= vitest run --config vitest.integration.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },
