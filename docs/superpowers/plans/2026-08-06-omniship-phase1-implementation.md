@@ -1871,7 +1871,9 @@ describe('GET /api/orders', () => {
 });
 ```
 
-Add to `package.json` scripts: `"test:integration": "DATABASE_URL_TEST=postgres://postgres:test@localhost:5433/omniship_test vitest run --config vitest.integration.config.ts"`.
+Add to `package.json` scripts: `"test:integration": "DATABASE_URL=postgres://postgres:test@localhost:5433/omniship_test DATABASE_URL_TEST=postgres://postgres:test@localhost:5433/omniship_test TOKEN_ENCRYPTION_KEY=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc= vitest run --config vitest.integration.config.ts"`.
+
+Both `DATABASE_URL` and `TOKEN_ENCRYPTION_KEY` are required here even though individual test files also set them in `beforeAll`/read `DATABASE_URL_TEST`: every integration test file imports its route/sync module (which transitively imports `@/db/client` and, for the sync tests, `@/lib/crypto`) at the top of the file, before any hook runs — `db/client.ts` throws eagerly at import time if `DATABASE_URL` is unset, so the whole `test:integration` run fails before a single test executes without it set at the process level.
 
 Create `vitest.integration.config.ts`:
 
