@@ -19,4 +19,11 @@ describe('verifyShopifyWebhook', () => {
   it('rejects a missing signature header', () => {
     expect(verifyShopifyWebhook(body, null, secret)).toBe(false);
   });
+
+  it('rejects everything when the secret is unset, even a signature computed with that empty secret', () => {
+    // An attacker who knows SHOPIFY_API_SECRET is missing can compute this
+    // themselves — an empty key is still a usable HMAC key.
+    const hmacWithEmptySecret = createHmac('sha256', '').update(body, 'utf8').digest('base64');
+    expect(verifyShopifyWebhook(body, hmacWithEmptySecret, '')).toBe(false);
+  });
 });

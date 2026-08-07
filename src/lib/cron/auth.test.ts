@@ -13,4 +13,12 @@ describe('isAuthorizedCronRequest', () => {
   it('rejects a mismatched token', () => {
     expect(isAuthorizedCronRequest('Bearer wrong', 'abc123')).toBe(false);
   });
+
+  it('rejects every request when the secret is unset, even a syntactically matching header', () => {
+    // `Bearer ` + '' is exactly what `Bearer ${secret}` builds when CRON_SECRET
+    // is missing — it must not authorize.
+    expect(isAuthorizedCronRequest('Bearer ', '')).toBe(false);
+    expect(isAuthorizedCronRequest('Bearer anything', '')).toBe(false);
+    expect(isAuthorizedCronRequest(null, '')).toBe(false);
+  });
 });

@@ -62,6 +62,11 @@ export async function syncShopifyOrders(storeId: string, overrides: Partial<Sync
   try {
     const accessToken = decrypt(store.accessToken);
     const updatedAtMin = store.lastSyncedAt ? store.lastSyncedAt.toISOString() : undefined;
+    // Captured BEFORE the fetch, not after: any order modified while the fetch
+    // (and its pagination loop) is in flight must still fall inside the next
+    // sync's `updated_at_min` window. Stamping the post-fetch time would skip
+    // everything changed during that window, permanently.
+    const syncStartedAt = new Date();
     const shopifyOrders = await fetchOrders(store.shopDomain, accessToken, updatedAtMin);
 
     for (const shopifyOrder of shopifyOrders) {
@@ -70,7 +75,7 @@ export async function syncShopifyOrders(storeId: string, overrides: Partial<Sync
 
     await db
       .update(stores)
-      .set({ lastSyncedAt: new Date(), status: 'connected', lastError: null })
+      .set({ lastSyncedAt: syncStartedAt, status: 'connected', lastError: null })
       .where(eq(stores.id, storeId));
 
     return { synced: shopifyOrders.length, failed: false };
