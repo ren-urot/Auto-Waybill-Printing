@@ -298,14 +298,14 @@ export default function WaybillsPage() {
                       {previewLoading && <p className="text-sm text-muted-foreground">Loading preview…</p>}
                       {!previewLoading && previewOrder && (
                         <div
-                          className="w-full max-w-xs rounded-md border bg-white text-black shadow-sm"
+                          className="mx-auto w-full max-w-[420px] rounded-md border bg-white text-black shadow-sm"
                           style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
                         >
                           {/*
                             PrintPreviewDocument renders barcodes/QR codes at their
                             true physical size (they must, for the real print flow at
-                            /print/[batch]) — that's wider than this 320px preview
-                            card, so it's scaled down as a unit rather than clipped.
+                            /print/[batch]) — that's wider than this preview card,
+                            so it's scaled down as a unit rather than clipped.
                           */}
                           <div className="h-[360px] overflow-hidden p-4">
                             <div className="origin-top-left scale-75">
