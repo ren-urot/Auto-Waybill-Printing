@@ -50,6 +50,10 @@ export interface PrintOrder {
   trackingNumber: string | null;
   paymentMethod?: string | null;
   createdAt?: string | Date | null;
+  // The store this order actually synced from — the "ship from" identity on
+  // a waybill should reflect the order's own store, not a single app-wide
+  // company name, since one merchant can run several connected stores.
+  storeName?: string | null;
 }
 
 interface PrintPreviewDocumentProps {
@@ -166,10 +170,10 @@ export function PrintPreviewDocument({
             <div className="mb-1.5 grid grid-cols-2 gap-3 border-b border-black pb-1.5">
               <div className="min-w-0">
                 <p className="text-[9px] font-semibold tracking-wide text-gray-500 uppercase">From</p>
-                {company ? (
+                {order.storeName || company ? (
                   <>
-                    <p className="font-medium">{company.name}</p>
-                    {company.address && <p>{company.address}</p>}
+                    <p className="font-medium">{order.storeName ?? company?.name}</p>
+                    {company?.address && <p>{company.address}</p>}
                   </>
                 ) : (
                   <p className="text-gray-400">—</p>
