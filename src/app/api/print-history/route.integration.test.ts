@@ -18,7 +18,7 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }));
 
-import { POST } from './route';
+import { GET, POST } from './route';
 
 beforeAll(() => {
   process.env.DATABASE_URL = TEST_DB_URL;
@@ -117,5 +117,27 @@ describe('POST /api/print-history', () => {
     expect(byOrderNumber['1000']).toBe('shipped');
     expect(byOrderNumber['1001']).toBe('cancelled');
     expect(byOrderNumber['1002']).toBe('printed');
+  });
+});
+
+describe('GET /api/print-history', () => {
+  it('rejects an unauthenticated request with 401', async () => {
+    currentUser.value = null;
+    const response = await GET();
+    expect(response.status).toBe(401);
+  });
+
+  it('returns logged print events newest first', async () => {
+    const [order] = await seedOrders(['ready_to_ship']);
+    await POST(postRequest({ orderIds: [order.id], paperSize: '4x6', documentType: 'waybill' }));
+    await POST(postRequest({ orderIds: [order.id], paperSize: 'a5', documentType: 'packing_slip' }));
+
+    const response = await GET();
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.printHistory).toHaveLength(2);
+    // Most recent (packing_slip) first.
+    expect(body.printHistory[0].documentType).toBe('packing_slip');
+    expect(body.printHistory[1].documentType).toBe('waybill');
   });
 });

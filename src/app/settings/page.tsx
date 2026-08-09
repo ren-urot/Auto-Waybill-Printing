@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
+import { SettingsTabs } from '@/components/settings-tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -68,7 +69,11 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-      <h1 className="text-2xl font-semibold mb-6">Company Profile</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <p className="text-sm text-muted-foreground">Manage your company profile and printing defaults.</p>
+      </div>
+      <SettingsTabs />
       <Card className="max-w-md">
         <CardHeader>
           <CardTitle>Company Info</CardTitle>

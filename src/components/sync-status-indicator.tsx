@@ -1,3 +1,4 @@
+import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface SyncStatusIndicatorProps {
@@ -17,8 +18,9 @@ export function SyncStatusIndicator({ lastSyncedAt, status, syncing, onSync }: S
             ? `Last synced ${lastSyncedAt.toLocaleTimeString()}`
             : 'Never synced'}
       </span>
-      <Button size="sm" onClick={onSync} disabled={syncing}>
-        {syncing ? 'Syncing…' : 'Sync now'}
+      <Button onClick={onSync} disabled={syncing}>
+        <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+        {syncing ? 'Syncing…' : 'Sync Now'}
       </Button>
     </div>
   );

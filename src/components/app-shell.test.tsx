@@ -2,14 +2,22 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { AppShell } from './app-shell';
 
-// AppShell now nests the SignOutButton client island, which calls useRouter.
-// There's no app router mounted under @testing-library/react, so it needs a stub.
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/',
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
+vi.mock('@/lib/supabase/client', () => ({
+  createSupabaseBrowserClient: () => ({
+    auth: {
+      getUser: () => Promise.resolve({ data: { user: null } }),
+      signOut: () => Promise.resolve({}),
+    },
+  }),
+}));
+
 describe('AppShell', () => {
-  it('renders nav links and children', () => {
+  it('renders nav links, the account menu, and children', () => {
     render(
       <AppShell>
         <p>page content</p>
@@ -19,6 +27,16 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: /orders/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /settings/i })).toBeInTheDocument();
     expect(screen.getByText('page content')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/account menu/i)).toBeInTheDocument();
+  });
+
+  it('marks the current page active via aria-current', () => {
+    render(
+      <AppShell>
+        <p>page content</p>
+      </AppShell>
+    );
+    expect(screen.getByRole('link', { name: /dashboard/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: /orders/i })).not.toHaveAttribute('aria-current');
   });
 });

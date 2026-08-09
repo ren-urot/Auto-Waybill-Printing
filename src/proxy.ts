@@ -13,6 +13,12 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
+  // TEMPORARY: auth gate disabled outside production while doing frontend-only
+  // redesign work with no login available. Never applies to a deployed build.
+  if (process.env.NODE_ENV !== 'production') {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -43,10 +49,11 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-// manifest.webmanifest and the PWA icons must stay reachable without a
-// session: browsers fetch the manifest (and its icons) without credentials,
-// so gating them behind auth redirected the fetch to /login and the app
-// silently stopped being installable.
+// manifest.webmanifest, the PWA icons, and the favicon (icon.svg, via
+// Next's app/icon.svg convention) must stay reachable without a session:
+// browsers fetch these without credentials, so gating them behind auth
+// redirected the fetch to /login — the manifest/PWA install broke silently,
+// and the browser tab fell back to no favicon at all.
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icon-.*\\.png).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|icon\\.svg|manifest.webmanifest|icon-.*\\.png).*)'],
 };

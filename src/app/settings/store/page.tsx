@@ -1,4 +1,5 @@
 import { AppShell } from '@/components/app-shell';
+import { SettingsTabs } from '@/components/settings-tabs';
 import { StoreConnectionCard } from '@/components/store-connection-card';
 import { db } from '@/db/client';
 import { stores } from '@/db/schema';
@@ -13,7 +14,11 @@ export default async function StoreSettingsPage({ searchParams }: StoreSettingsP
 
   return (
     <AppShell>
-      <h1 className="text-2xl font-semibold mb-6">Store Connection</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <p className="text-sm text-muted-foreground">Manage your company profile and printing defaults.</p>
+      </div>
+      <SettingsTabs />
       <StoreConnectionCard
         store={
           store

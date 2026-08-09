@@ -49,6 +49,8 @@ export async function GET(request: Request) {
       customerName: orders.customerName,
       courier: orders.courier,
       status: orders.status,
+      trackingNumber: orders.trackingNumber,
+      createdAt: orders.createdAt,
     })
     .from(orders)
     .where(conditions.length > 0 ? and(...conditions) : undefined)

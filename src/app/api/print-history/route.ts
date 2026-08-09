@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { desc } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db/client';
 import { printHistory } from '@/db/schema';
@@ -10,6 +11,26 @@ const printHistoryBodySchema = z.object({
   paperSize: z.enum(['4x6', 'a6', 'a5', 'letter']),
   documentType: z.enum(['waybill', 'packing_slip']),
 });
+
+const MAX_HISTORY_ROWS = 100;
+
+export async function GET() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const rows = await db
+    .select()
+    .from(printHistory)
+    .orderBy(desc(printHistory.printedAt))
+    .limit(MAX_HISTORY_ROWS);
+
+  return NextResponse.json({ printHistory: rows });
+}
 
 export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();

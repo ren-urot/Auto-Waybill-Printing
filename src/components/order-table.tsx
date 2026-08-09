@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/status-badge';
+import { PlatformIcon } from '@/components/platform-icon';
 
 export interface OrderRow {
   id: string;
@@ -8,6 +9,8 @@ export interface OrderRow {
   customerName: string;
   courier: string | null;
   status: string;
+  trackingNumber?: string | null;
+  createdAt?: string;
 }
 
 interface OrderTableProps {
@@ -24,41 +27,86 @@ export function OrderTable({ orders, selected, onSelectionChange }: OrderTablePr
     onSelectionChange(next);
   }
 
+  function toggleAll() {
+    if (selected.size === orders.length) {
+      onSelectionChange(new Set());
+    } else {
+      onSelectionChange(new Set(orders.map((o) => o.id)));
+    }
+  }
+
+  const allSelected = orders.length > 0 && selected.size === orders.length;
+
+  if (orders.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed py-16 text-center">
+        <p className="text-sm font-medium">No orders match these filters</p>
+        <p className="text-sm text-muted-foreground">Try a different status, keyword, or sync your store.</p>
+      </div>
+    );
+  }
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead />
-          <TableHead>Order #</TableHead>
-          <TableHead>Customer</TableHead>
-          <TableHead>Courier</TableHead>
-          <TableHead>Status</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {orders.map((order) => (
-          <TableRow key={order.id}>
-            <TableCell>
+    <div className="overflow-x-auto rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="w-10">
               <input
                 type="checkbox"
-                aria-label={`Select order ${order.orderNumber}`}
-                checked={selected.has(order.id)}
-                onChange={() => toggle(order.id)}
+                aria-label="Select all orders"
+                checked={allSelected}
+                onChange={toggleAll}
+                className="h-4 w-4 rounded border-input"
               />
-            </TableCell>
-            <TableCell className="font-mono">
-              <Link href={`/orders/${order.id}`}>{order.orderNumber}</Link>
-            </TableCell>
-            <TableCell>{order.customerName}</TableCell>
-            <TableCell>{order.courier ?? '—'}</TableCell>
-            <TableCell>
-              <Badge variant="secondary" className="capitalize">
-                {order.status.replace('_', ' ')}
-              </Badge>
-            </TableCell>
+            </TableHead>
+            <TableHead>Order #</TableHead>
+            <TableHead>Customer</TableHead>
+            <TableHead>Platform</TableHead>
+            <TableHead>Courier</TableHead>
+            <TableHead>Tracking #</TableHead>
+            <TableHead>Order Date</TableHead>
+            <TableHead>Status</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {orders.map((order) => (
+            <TableRow key={order.id} className="group">
+              <TableCell>
+                <input
+                  type="checkbox"
+                  aria-label={`Select order ${order.orderNumber}`}
+                  checked={selected.has(order.id)}
+                  onChange={() => toggle(order.id)}
+                  className="h-4 w-4 rounded border-input"
+                />
+              </TableCell>
+              <TableCell className="font-mono font-medium">
+                <Link href={`/orders/${order.id}`} className="hover:text-primary hover:underline">
+                  #{order.orderNumber}
+                </Link>
+              </TableCell>
+              <TableCell>{order.customerName}</TableCell>
+              <TableCell>
+                <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <PlatformIcon platform="shopify" className="h-3.5 w-3.5 shrink-0" />
+                  Shopify
+                </span>
+              </TableCell>
+              <TableCell className="text-muted-foreground">{order.courier ?? '—'}</TableCell>
+              <TableCell className="font-mono text-xs text-muted-foreground">
+                {order.trackingNumber ?? '—'}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {order.createdAt ? new Date(order.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}
+              </TableCell>
+              <TableCell>
+                <StatusBadge status={order.status} />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
