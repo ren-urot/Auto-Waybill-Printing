@@ -29,6 +29,7 @@ export interface PrintOrder {
   items?: Array<{ sku?: string | null; title?: string | null; quantity?: number | null }> | null;
   courier: string | null;
   trackingNumber: string | null;
+  paymentMethod?: string | null;
 }
 
 interface PrintPreviewDocumentProps {
@@ -83,40 +84,81 @@ export function PrintPreviewDocument({
       <style>{`@page { size: ${PAGE_SIZES[paperSize]}; margin: 8mm; } .print-section:not(:last-child) { page-break-after: always; }`}</style>
       {orders.map((order) => {
         const items = Array.isArray(order.items) ? order.items : [];
-        return (
-          <section key={order.id} className="print-section p-2 font-sans text-sm">
-            {company && (
-              <header className="mb-2 border-b pb-1">
-                <p className="font-semibold">{company.name}</p>
-                {company.address && <p className="text-xs">{company.address}</p>}
-              </header>
-            )}
-            <h2 className="font-mono font-semibold text-base">Order #{order.orderNumber}</h2>
-            <p>{order.customerName}</p>
-            <p>{order.phone ?? ''}</p>
-            <p>{addressLine(order.address)}</p>
 
-            {documentType === 'waybill' ? (
-              <>
-                <p>Courier: {order.courier ?? '—'}</p>
-                {order.trackingNumber && (
-                  <BarcodeBlock
-                    value={getTrackingBarcodeValue(order.trackingNumber)}
-                    onRendered={handleRendered}
-                  />
-                )}
-              </>
-            ) : (
-              <ul>
+        if (documentType !== 'waybill') {
+          return (
+            <section key={order.id} className="print-section p-2 font-sans text-sm">
+              {company && (
+                <header className="mb-2 border-b pb-1">
+                  <p className="font-semibold">{company.name}</p>
+                  {company.address && <p className="text-xs">{company.address}</p>}
+                </header>
+              )}
+              <h2 className="font-mono font-semibold text-base">Order #{order.orderNumber}</h2>
+              <p>{order.customerName}</p>
+              <p>{order.phone ?? ''}</p>
+              <p>{addressLine(order.address)}</p>
+              <ul className="mt-2">
                 {items.map((item, i) => (
                   <li key={i}>
                     {item?.quantity ?? 0}× {item?.title ?? 'Item'} {item?.sku ? `(${item.sku})` : ''}
                   </li>
                 ))}
               </ul>
+              <div className="mt-3">
+                <QRBlock value={getOrderQrPayload(order)} onRendered={handleRendered} />
+              </div>
+            </section>
+          );
+        }
+
+        return (
+          <section key={order.id} className="print-section p-3 font-sans text-[11px] leading-tight text-black">
+            <div className="mb-1.5 border-b-2 border-black pb-1.5">
+              <p className="text-sm font-bold tracking-tight uppercase">{order.courier ?? 'Courier not assigned'}</p>
+            </div>
+
+            {order.trackingNumber && (
+              <div className="mb-1.5 flex flex-col items-center border-b border-black pb-1.5">
+                <BarcodeBlock value={getTrackingBarcodeValue(order.trackingNumber)} onRendered={handleRendered} />
+              </div>
             )}
 
-            <QRBlock value={getOrderQrPayload(order)} onRendered={handleRendered} />
+            <div className="mb-1.5 grid grid-cols-2 gap-3 border-b border-black pb-1.5">
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold tracking-wide text-gray-500 uppercase">From</p>
+                {company ? (
+                  <>
+                    <p className="font-medium">{company.name}</p>
+                    {company.address && <p>{company.address}</p>}
+                  </>
+                ) : (
+                  <p className="text-gray-400">—</p>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold tracking-wide text-gray-500 uppercase">To</p>
+                <p className="font-medium">{order.customerName}</p>
+                <p>{addressLine(order.address)}</p>
+                {order.phone && <p>{order.phone}</p>}
+              </div>
+            </div>
+
+            <div className="mb-1.5 flex items-center justify-between gap-3 border-b border-black pb-1.5">
+              <div>
+                <p className="text-[9px] font-semibold tracking-wide text-gray-500 uppercase">Payment</p>
+                <p className="font-medium">{order.paymentMethod ?? '—'}</p>
+              </div>
+              <QRBlock value={getOrderQrPayload(order)} onRendered={handleRendered} />
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[9px] font-semibold tracking-wide text-gray-500 uppercase">Order ID</p>
+                <p className="font-mono font-medium">{order.orderNumber}</p>
+              </div>
+              <div className="w-24 border border-black py-1 text-center text-[8px] text-gray-400">Signature</div>
+            </div>
           </section>
         );
       })}
