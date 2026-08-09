@@ -298,17 +298,26 @@ export default function WaybillsPage() {
                       {previewLoading && <p className="text-sm text-muted-foreground">Loading preview…</p>}
                       {!previewLoading && previewOrder && (
                         <div
-                          className="mx-auto w-full max-w-[420px] rounded-md border bg-white text-black shadow-sm"
+                          className="mx-auto w-full max-w-[420px] overflow-hidden rounded-md border bg-white text-black shadow-sm"
                           style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
                         >
                           {/*
-                            PrintPreviewDocument renders barcodes/QR codes at their
-                            true physical size (they must, for the real print flow at
-                            /print/[batch]) — that's wider than this preview card,
-                            so it's scaled down as a unit rather than clipped.
+                            PrintPreviewDocument renders at true physical size
+                            (it must, for the real print flow at /print/[batch])
+                            and now deliberately fills the full page height for
+                            each paper size — scaled down as a unit so the card
+                            shows the whole label with no empty space, instead
+                            of clipping it to a fixed preview height.
                           */}
-                          <div className="h-[360px] overflow-hidden p-4">
-                            <div className="origin-top-left scale-75">
+                          <div className="p-4">
+                            {/*
+                              `zoom` (not `transform: scale`) so the shrunk
+                              content's reserved layout space shrinks with it —
+                              a transform-based scale leaves the pre-scale
+                              height reserved, showing as blank space below
+                              the visually-shrunk label.
+                            */}
+                            <div style={{ zoom: 0.55 }}>
                               <PrintPreviewDocument orders={[previewOrder]} paperSize={paperSize} documentType={documentType} />
                             </div>
                           </div>
