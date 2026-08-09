@@ -6,11 +6,20 @@ import { BarcodeBlock } from './barcode-block';
 import { QRBlock } from './qr-block';
 import { getTrackingBarcodeValue, getOrderQrPayload } from '@/lib/print/codes';
 
-// A colored badge, not a reproduction of any courier's actual logo — we have
-// no licensing/API partnership with these couriers to use their real marks,
-// and a hand-drawn recreation of a trademarked wordmark would misrepresent
-// this as an official courier document. Falls back to a neutral color for
-// couriers not in this list.
+// Real courier logos (from each courier's own Wikimedia Commons upload) —
+// showing which courier is actually handling this specific shipment is
+// standard, functional labeling (the same reason every Shopify/Lazada/Amazon
+// shipping label shows the real carrier's mark), not a claim of partnership
+// with them. Couriers without a matched logo fall back to a plain colored
+// text badge instead.
+const COURIER_LOGOS: Record<string, string> = {
+  'j&t express': '/couriers/jt-express.svg',
+  'ninja van': '/couriers/ninja-van.svg',
+  'lbc express': '/couriers/lbc-express.svg',
+  'flash express': '/couriers/flash-express.svg',
+  'lazada logistics': '/couriers/lazada.svg',
+};
+
 const COURIER_COLORS: Record<string, string> = {
   'j&t express': '#ED1C24',
   'ninja van': '#6F2DBD',
@@ -19,6 +28,10 @@ const COURIER_COLORS: Record<string, string> = {
   'spx express': '#EE4D2D',
   'lazada logistics': '#0F146D',
 };
+
+function courierLogo(courier: string | null): string | undefined {
+  return COURIER_LOGOS[courier?.trim().toLowerCase() ?? ''];
+}
 
 function courierColor(courier: string | null): string {
   return COURIER_COLORS[courier?.trim().toLowerCase() ?? ''] ?? '#374151';
@@ -139,13 +152,18 @@ export function PrintPreviewDocument({
         return (
           <section key={order.id} className="print-section p-3 font-sans text-[11px] leading-tight text-black">
             <div className="mb-1.5 flex items-center justify-between border-b-2 border-black pb-1.5">
-              <span
-                className="flex items-center gap-1.5 rounded px-2 py-1 text-sm font-bold tracking-tight text-white uppercase"
-                style={{ backgroundColor: courierColor(order.courier) }}
-              >
-                <Truck className="h-3.5 w-3.5" />
-                {order.courier ?? 'Courier not assigned'}
-              </span>
+              {courierLogo(order.courier) ? (
+                // eslint-disable-next-line @next/next/no-img-element -- static SVG from /public, printed output doesn't benefit from next/image
+                <img src={courierLogo(order.courier)} alt={order.courier ?? ''} className="h-7 max-w-[140px] object-contain object-left" />
+              ) : (
+                <span
+                  className="flex items-center gap-1.5 rounded px-2 py-1 text-sm font-bold tracking-tight text-white uppercase"
+                  style={{ backgroundColor: courierColor(order.courier) }}
+                >
+                  <Truck className="h-3.5 w-3.5" />
+                  {order.courier ?? 'Courier not assigned'}
+                </span>
+              )}
               {order.createdAt && (
                 <span className="text-right text-[9px] text-gray-500">
                   Ship Date
