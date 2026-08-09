@@ -79,7 +79,6 @@ const STORE_IDS = [SHOPIFY_STORE_ID, TIKTOK_STORE_ID, SHOPEE_STORE_ID];
 
 export const MOCK_ORDERS: OrderRow[] = Array.from({ length: 24 }, (_, i) => {
   const status = pick(STATUSES, i);
-  const hasTracking = status === 'printed' || status === 'packed' || status === 'shipped';
   const daysAgo = i % 7;
   const createdAt = new Date(Date.now() - daysAgo * 86400000 - i * 3600000);
   const product = pick(PRODUCTS, i);
@@ -99,8 +98,12 @@ export const MOCK_ORDERS: OrderRow[] = Array.from({ length: 24 }, (_, i) => {
       country: 'Philippines',
     },
     items: [{ sku: `SKU-${i}`, title: product.name, quantity: (i % 2) + 1 }],
-    courier: hasTracking ? pick(COURIERS, i) : null,
-    trackingNumber: hasTracking ? `TRK${900000000 + i}` : null,
+    // Every demo order carries a courier and tracking number — this is
+    // synthetic demo data meant for showing the product to investors/
+    // clients, not a simulation of every real-world order-lifecycle edge
+    // case, so there's no value in showing gaps here.
+    courier: pick(COURIERS, i),
+    trackingNumber: `TRK${900000000 + i}`,
     shippingFee: String(45 + (i % 8) * 10),
     paymentMethod: i % 2 === 0 ? 'COD' : 'Prepaid',
     status,
