@@ -1,9 +1,28 @@
 'use client';
 
 import { useCallback, useRef } from 'react';
+import { Truck } from 'lucide-react';
 import { BarcodeBlock } from './barcode-block';
 import { QRBlock } from './qr-block';
 import { getTrackingBarcodeValue, getOrderQrPayload } from '@/lib/print/codes';
+
+// A colored badge, not a reproduction of any courier's actual logo — we have
+// no licensing/API partnership with these couriers to use their real marks,
+// and a hand-drawn recreation of a trademarked wordmark would misrepresent
+// this as an official courier document. Falls back to a neutral color for
+// couriers not in this list.
+const COURIER_COLORS: Record<string, string> = {
+  'j&t express': '#ED1C24',
+  'ninja van': '#6F2DBD',
+  'lbc express': '#00A99D',
+  'flash express': '#FFC629',
+  'spx express': '#EE4D2D',
+  'lazada logistics': '#0F146D',
+};
+
+function courierColor(courier: string | null): string {
+  return COURIER_COLORS[courier?.trim().toLowerCase() ?? ''] ?? '#374151';
+}
 
 export type PaperSize = '4x6' | 'a6' | 'a5' | 'letter';
 
@@ -30,6 +49,7 @@ export interface PrintOrder {
   courier: string | null;
   trackingNumber: string | null;
   paymentMethod?: string | null;
+  createdAt?: string | Date | null;
 }
 
 interface PrintPreviewDocumentProps {
@@ -114,8 +134,27 @@ export function PrintPreviewDocument({
 
         return (
           <section key={order.id} className="print-section p-3 font-sans text-[11px] leading-tight text-black">
-            <div className="mb-1.5 border-b-2 border-black pb-1.5">
-              <p className="text-sm font-bold tracking-tight uppercase">{order.courier ?? 'Courier not assigned'}</p>
+            <div className="mb-1.5 flex items-center justify-between border-b-2 border-black pb-1.5">
+              <span
+                className="flex items-center gap-1.5 rounded px-2 py-1 text-sm font-bold tracking-tight text-white uppercase"
+                style={{ backgroundColor: courierColor(order.courier) }}
+              >
+                <Truck className="h-3.5 w-3.5" />
+                {order.courier ?? 'Courier not assigned'}
+              </span>
+              {order.createdAt && (
+                <span className="text-right text-[9px] text-gray-500">
+                  Ship Date
+                  <br />
+                  <span className="font-medium text-black">
+                    {new Date(order.createdAt).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </span>
+                </span>
+              )}
             </div>
 
             {order.trackingNumber && (
@@ -152,13 +191,26 @@ export function PrintPreviewDocument({
               <QRBlock value={getOrderQrPayload(order)} onRendered={handleRendered} />
             </div>
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="mb-1.5 flex items-center justify-between gap-3 border-b border-dashed border-black pb-1.5">
               <div>
                 <p className="text-[9px] font-semibold tracking-wide text-gray-500 uppercase">Order ID</p>
                 <p className="font-mono font-medium">{order.orderNumber}</p>
               </div>
               <div className="w-24 border border-black py-1 text-center text-[8px] text-gray-400">Signature</div>
             </div>
+
+            {items.length > 0 && (
+              <div>
+                <p className="text-[9px] font-semibold tracking-wide text-gray-500 uppercase">Product Details</p>
+                <ul>
+                  {items.map((item, i) => (
+                    <li key={i}>
+                      {item?.quantity ?? 0}× {item?.title ?? 'Item'} {item?.sku ? `(${item.sku})` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </section>
         );
       })}
