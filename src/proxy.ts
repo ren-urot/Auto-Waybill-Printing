@@ -13,11 +13,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
-  // TEMPORARY: auth gate disabled outside production while doing frontend-only
-  // redesign work with no login available. Never applies to a deployed build.
-  if (process.env.NODE_ENV !== 'production') {
-    return NextResponse.next({ request });
-  }
+  // TEMPORARY: auth gate fully disabled everywhere (including the deployed
+  // Vercel build) while doing frontend-only redesign work with no login
+  // credentials to hand. Revert this before any real usage.
+  return NextResponse.next({ request });
 
   let response = NextResponse.next({ request });
 

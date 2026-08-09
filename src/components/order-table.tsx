@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { StatusBadge } from '@/components/status-badge';
-import { PlatformIcon } from '@/components/platform-icon';
+import { PlatformIcon, type Platform } from '@/components/platform-icon';
 
 export interface OrderRow {
   id: string;
@@ -11,6 +11,7 @@ export interface OrderRow {
   status: string;
   trackingNumber?: string | null;
   createdAt?: string;
+  platform?: string | null;
 }
 
 interface OrderTableProps {
@@ -88,9 +89,9 @@ export function OrderTable({ orders, selected, onSelectionChange }: OrderTablePr
               </TableCell>
               <TableCell>{order.customerName}</TableCell>
               <TableCell>
-                <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <PlatformIcon platform="shopify" className="h-3.5 w-3.5 shrink-0" />
-                  Shopify
+                <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground capitalize">
+                  <PlatformIcon platform={(order.platform ?? 'shopify') as Platform} className="h-3.5 w-3.5 shrink-0" />
+                  {order.platform ?? 'Shopify'}
                 </span>
               </TableCell>
               <TableCell className="text-muted-foreground">{order.courier ?? '—'}</TableCell>

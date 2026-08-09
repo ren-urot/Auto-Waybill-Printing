@@ -3,6 +3,7 @@ import { SettingsTabs } from '@/components/settings-tabs';
 import { StoreConnectionCard } from '@/components/store-connection-card';
 import { db } from '@/db/client';
 import { stores } from '@/db/schema';
+import { safeQuery } from '@/lib/db/safe-query';
 
 interface StoreSettingsPageProps {
   searchParams: Promise<{ error?: string; connected?: string }>;
@@ -10,7 +11,7 @@ interface StoreSettingsPageProps {
 
 export default async function StoreSettingsPage({ searchParams }: StoreSettingsPageProps) {
   const { error } = await searchParams;
-  const [store] = await db.select().from(stores).limit(1);
+  const [store] = await safeQuery(() => db.select().from(stores).limit(1), []);
 
   return (
     <AppShell>

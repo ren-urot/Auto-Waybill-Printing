@@ -3,6 +3,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { PlatformIcon, type Platform } from '@/components/platform-icon';
 import { db } from '@/db/client';
 import { stores } from '@/db/schema';
+import { safeQuery } from '@/lib/db/safe-query';
+import { getDemoMode } from '@/lib/demo/mode';
+import { MOCK_STORES } from '@/lib/demo/mock-data';
 
 // Reads live store data with no dynamic route segment or searchParams to
 // trigger dynamic rendering automatically — see src/app/page.tsx for why
@@ -17,7 +20,9 @@ const PLATFORMS: Array<{ key: Platform; name: string; description: string }> = [
 ];
 
 export default async function IntegrationsPage() {
-  const allStores = await db.select().from(stores);
+  const real = await safeQuery(() => db.select().from(stores), []);
+  const demoMode = await getDemoMode();
+  const allStores = demoMode === 'populated' && real.length === 0 ? MOCK_STORES : real;
   const shopifyConnected = allStores.some((store) => store.platform === 'shopify');
 
   return (

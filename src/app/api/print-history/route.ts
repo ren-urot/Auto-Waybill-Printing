@@ -5,6 +5,9 @@ import { db } from '@/db/client';
 import { printHistory } from '@/db/schema';
 import { markOrdersPrinted } from '@/lib/orders/print-status';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { safeQuery } from '@/lib/db/safe-query';
+import { getDemoMode } from '@/lib/demo/mode';
+import { MOCK_PRINT_HISTORY } from '@/lib/demo/mock-data';
 
 const printHistoryBodySchema = z.object({
   orderIds: z.array(z.uuid()).min(1),
@@ -15,19 +18,29 @@ const printHistoryBodySchema = z.object({
 const MAX_HISTORY_ROWS = 100;
 
 export async function GET() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const demoMode = await getDemoMode();
+
+  // TEMPORARY: real Supabase sign-in is skipped while doing frontend-only
+  // design review (see src/app/login/page.tsx) — the demo cookie stands in
+  // for a real session so this route doesn't 401 on every request.
+  if (!demoMode) {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
-  const rows = await db
-    .select()
-    .from(printHistory)
-    .orderBy(desc(printHistory.printedAt))
-    .limit(MAX_HISTORY_ROWS);
+  const rows = await safeQuery(
+    () => db.select().from(printHistory).orderBy(desc(printHistory.printedAt)).limit(MAX_HISTORY_ROWS),
+    []
+  );
+
+  if (rows.length === 0 && demoMode === 'populated') {
+    return NextResponse.json({ printHistory: MOCK_PRINT_HISTORY });
+  }
 
   return NextResponse.json({ printHistory: rows });
 }

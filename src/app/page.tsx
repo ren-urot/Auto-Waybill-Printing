@@ -9,6 +9,9 @@ import { DashboardSyncControls } from '@/components/dashboard-sync-controls';
 import { PlatformIcon, type Platform } from '@/components/platform-icon';
 import { db } from '@/db/client';
 import { orders, stores, printHistory } from '@/db/schema';
+import { safeQuery } from '@/lib/db/safe-query';
+import { getDemoMode } from '@/lib/demo/mode';
+import { computeMockDashboardData } from '@/lib/demo/mock-data';
 
 // Without this, Next.js statically prerenders this page at build time and
 // bakes in whatever order counts existed then — every visitor would see
@@ -29,9 +32,8 @@ async function countByStatus(storeId: string | undefined, status: string) {
   return value;
 }
 
-export default async function DashboardPage() {
+async function loadDashboardData() {
   const allStores = await db.select().from(stores);
-  const primaryStore = allStores[0];
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -43,7 +45,6 @@ export default async function DashboardPage() {
     countByStatus(undefined, 'shipped'),
     countByStatus(undefined, 'cancelled'),
   ]);
-  const failedSync = allStores.filter((store) => store.status === 'error').length;
 
   const storeSummaries = await Promise.all(
     allStores.map(async (store) => {
@@ -61,9 +62,33 @@ export default async function DashboardPage() {
       return { store, total, ready, printed: storePrinted, shipped: storeShipped, cancelled: storeCancelled };
     })
   );
-  const totalOrders = storeSummaries.reduce((sum, s) => sum + s.total, 0);
 
   const recentPrints = await db.select().from(printHistory).orderBy(desc(printHistory.printedAt)).limit(5);
+
+  return { allStores, todayOrders, readyToShip, printed, shipped, cancelled, storeSummaries, recentPrints };
+}
+
+export default async function DashboardPage() {
+  const demoMode = await getDemoMode();
+  const real = await safeQuery<Awaited<ReturnType<typeof loadDashboardData>>>(loadDashboardData, {
+    allStores: [],
+    todayOrders: 0,
+    readyToShip: 0,
+    printed: 0,
+    shipped: 0,
+    cancelled: 0,
+    storeSummaries: [],
+    recentPrints: [],
+  });
+  // Mock data only ever fills in where the real result is empty — a "Log
+  // in" demo path fills an empty/unreachable database with sample data, a
+  // "Create an account" demo path stays genuinely empty.
+  const { allStores, todayOrders, readyToShip, printed, shipped, cancelled, storeSummaries, recentPrints } =
+    demoMode === 'populated' && real.allStores.length === 0 ? computeMockDashboardData() : real;
+
+  const primaryStore = allStores[0];
+  const failedSync = allStores.filter((store) => store.status === 'error').length;
+  const totalOrders = storeSummaries.reduce((sum, s) => sum + s.total, 0);
 
   return (
     <AppShell>

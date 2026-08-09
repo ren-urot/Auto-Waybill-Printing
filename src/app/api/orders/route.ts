@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
-import { and, eq, gte, lte, ilike, or, desc, asc } from 'drizzle-orm';
+import { and, eq, gte, lte, ilike, or, desc, asc, type SQL } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { orders } from '@/db/schema';
+import { orders, stores } from '@/db/schema';
 import { parseOrderFilters } from '@/lib/orders/filters';
+import { safeQuery } from '@/lib/db/safe-query';
+import { getDemoMode } from '@/lib/demo/mode';
+import { mockOrderRows } from '@/lib/demo/mock-data';
 
 /**
  * Phase 1 has no pagination UI, so this caps the response instead. Selecting
@@ -15,7 +18,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const filters = parseOrderFilters(searchParams);
 
-  const conditions = [];
+  const conditions: SQL[] = [];
   if (filters.status) conditions.push(eq(orders.status, filters.status));
   if (filters.courier) conditions.push(eq(orders.courier, filters.courier));
   if (filters.paymentMethod) conditions.push(eq(orders.paymentMethod, filters.paymentMethod));
@@ -29,7 +32,9 @@ export async function GET(request: Request) {
   }
   if (filters.keyword) {
     conditions.push(
-      or(ilike(orders.customerName, `%${filters.keyword}%`), ilike(orders.orderNumber, `%${filters.keyword}%`))
+      // Given two defined arguments, `or()` always returns a SQL fragment —
+      // the `| undefined` in its type only covers the zero-argument case.
+      or(ilike(orders.customerName, `%${filters.keyword}%`), ilike(orders.orderNumber, `%${filters.keyword}%`))!
     );
   }
 
@@ -41,21 +46,33 @@ export async function GET(request: Request) {
         : desc(orders.createdAt);
 
   // Exactly the columns OrderTable's OrderRow consumes — nothing else crosses
-  // the wire.
-  const rows = await db
-    .select({
-      id: orders.id,
-      orderNumber: orders.orderNumber,
-      customerName: orders.customerName,
-      courier: orders.courier,
-      status: orders.status,
-      trackingNumber: orders.trackingNumber,
-      createdAt: orders.createdAt,
-    })
-    .from(orders)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(orderBy)
-    .limit(MAX_ROWS);
+  // the wire. `platform` comes from a join, not an `orders` column (see
+  // src/lib/orders/filters.ts for why orders has no platform column of its
+  // own) — it's read-only display data here, not a new filterable field.
+  const rows = await safeQuery(
+    () =>
+      db
+        .select({
+          id: orders.id,
+          orderNumber: orders.orderNumber,
+          customerName: orders.customerName,
+          courier: orders.courier,
+          status: orders.status,
+          trackingNumber: orders.trackingNumber,
+          createdAt: orders.createdAt,
+          platform: stores.platform,
+        })
+        .from(orders)
+        .leftJoin(stores, eq(orders.storeId, stores.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(orderBy)
+        .limit(MAX_ROWS),
+    []
+  );
+
+  if (rows.length === 0 && (await getDemoMode()) === 'populated') {
+    return NextResponse.json({ orders: mockOrderRows(filters) });
+  }
 
   return NextResponse.json({ orders: rows });
 }

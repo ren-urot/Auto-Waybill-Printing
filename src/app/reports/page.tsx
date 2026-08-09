@@ -6,6 +6,7 @@ import { StatCard } from '@/components/stat-card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { db } from '@/db/client';
 import { orders, printHistory } from '@/db/schema';
+import { safeQuery } from '@/lib/db/safe-query';
 
 // Reads live order/print-history data with no dynamic route segment or
 // searchParams to trigger dynamic rendering automatically — see
@@ -19,7 +20,7 @@ const REPORT_TABS = [
   { value: 'couriers', label: 'Couriers' },
 ];
 
-export default async function ReportsPage() {
+async function loadReportsData() {
   const [totalOrders, printedCount, shippedCount, cancelledCount, printBatches] = await Promise.all([
     db.select({ value: count() }).from(orders).then(([r]) => r.value),
     db.select({ value: count() }).from(orders).where(eq(orders.status, 'printed')).then(([r]) => r.value),
@@ -27,6 +28,13 @@ export default async function ReportsPage() {
     db.select({ value: count() }).from(orders).where(eq(orders.status, 'cancelled')).then(([r]) => r.value),
     db.select().from(printHistory).orderBy(desc(printHistory.printedAt)).limit(10),
   ]);
+  return { totalOrders, printedCount, shippedCount, cancelledCount, printBatches };
+}
+
+export default async function ReportsPage() {
+  const { totalOrders, printedCount, shippedCount, cancelledCount, printBatches } = await safeQuery<
+    Awaited<ReturnType<typeof loadReportsData>>
+  >(loadReportsData, { totalOrders: 0, printedCount: 0, shippedCount: 0, cancelledCount: 0, printBatches: [] });
   const totalWaybillsPrinted = printBatches.reduce((sum, entry) => sum + entry.orderIds.length, 0);
 
   return (

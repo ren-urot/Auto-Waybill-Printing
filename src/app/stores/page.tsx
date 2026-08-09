@@ -6,13 +6,16 @@ import { Button } from '@/components/ui/button';
 import { PlatformIcon, type Platform } from '@/components/platform-icon';
 import { db } from '@/db/client';
 import { stores, orders } from '@/db/schema';
+import { safeQuery } from '@/lib/db/safe-query';
+import { getDemoMode } from '@/lib/demo/mode';
+import { MOCK_STORES, MOCK_ORDERS } from '@/lib/demo/mock-data';
 
 // Reads live store/order data with no dynamic route segment or searchParams
 // to trigger dynamic rendering automatically — without this, Next.js bakes
 // the store list in at build time (see src/app/page.tsx for the same fix).
 export const dynamic = 'force-dynamic';
 
-export default async function StoresPage() {
+async function loadStoresData() {
   const allStores = await db.select().from(stores);
   const storeOrderCounts = await Promise.all(
     allStores.map(async (store) => {
@@ -20,6 +23,22 @@ export default async function StoresPage() {
       return value;
     })
   );
+  return { allStores, storeOrderCounts };
+}
+
+export default async function StoresPage() {
+  const real = await safeQuery<Awaited<ReturnType<typeof loadStoresData>>>(loadStoresData, {
+    allStores: [],
+    storeOrderCounts: [],
+  });
+  const demoMode = await getDemoMode();
+  const { allStores, storeOrderCounts } =
+    demoMode === 'populated' && real.allStores.length === 0
+      ? {
+          allStores: MOCK_STORES,
+          storeOrderCounts: MOCK_STORES.map((s) => MOCK_ORDERS.filter((o) => o.storeId === s.id).length),
+        }
+      : real;
 
   return (
     <AppShell>
