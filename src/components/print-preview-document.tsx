@@ -182,7 +182,7 @@ function WaybillLabel({
   );
 
   const barcode = order.trackingNumber && (
-    <div className={`flex flex-col items-center border-b border-black ${sectionPad}`}>
+    <div className={`flex flex-col items-center border-b border-black ${sectionPad} ${landscape ? 'col-span-2' : ''}`}>
       <BarcodeBlock
         value={getTrackingBarcodeValue(order.trackingNumber)}
         onRendered={onRendered}
@@ -192,8 +192,13 @@ function WaybillLabel({
     </div>
   );
 
+  // Kept full-width even in landscape (not paired into a half column like
+  // paymentQr/orderIdSignature below) — JsBarcode renders the barcode SVG at
+  // a fixed pixel width that doesn't shrink to fit its container, so
+  // confining it to half the page width let it visually overflow into the
+  // neighboring column's text.
   const fromTo = (
-    <div className={`grid grid-cols-2 gap-3 border-b border-black ${sectionPad}`}>
+    <div className={`grid grid-cols-2 gap-3 border-b border-black ${sectionPad} ${landscape ? 'col-span-2' : ''}`}>
       <div className="min-w-0">
         <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>From</p>
         {order.storeName || company ? (
