@@ -127,122 +127,152 @@ function WaybillLabel({
   order,
   heightMm,
   compact,
+  landscape,
   company,
   onRendered,
 }: {
   order: PrintOrder;
   heightMm: number;
   compact: boolean;
+  landscape: boolean;
   company?: { name: string; address: string | null };
   onRendered: () => void;
 }) {
   const items = Array.isArray(order.items) ? order.items : [];
-  const barcodeHeight = compact ? 40 : 64;
-  const barcodeFontSize = compact ? 12 : 14;
-  const qrSize = compact ? 88 : 128;
-  const textSize = compact ? 'text-[11px]' : 'text-[13px]';
-  const labelSize = compact ? 'text-[9px]' : 'text-[10px]';
+  const shrink = compact || landscape;
+  const barcodeHeight = shrink ? 40 : 64;
+  const barcodeFontSize = shrink ? 12 : 14;
+  const qrSize = shrink ? 88 : 128;
+  const textSize = shrink ? 'text-[11px]' : 'text-[13px]';
+  const labelSize = shrink ? 'text-[9px]' : 'text-[10px]';
+  const sectionPad = landscape ? 'py-1.5' : 'py-3';
+
+  const header = (
+    <div className={`flex items-center justify-between border-b-2 border-black pb-2 ${landscape ? 'col-span-2' : ''}`}>
+      {courierLogo(order.courier) ? (
+        // eslint-disable-next-line @next/next/no-img-element -- static SVG from /public, printed output doesn't benefit from next/image
+        <img
+          src={courierLogo(order.courier)}
+          alt={order.courier ?? ''}
+          className={shrink ? 'h-6 max-w-[130px] object-contain object-left' : 'h-9 max-w-[180px] object-contain object-left'}
+        />
+      ) : (
+        <span
+          className={`flex items-center gap-1.5 rounded font-bold tracking-tight text-white uppercase ${shrink ? 'px-2 py-1 text-xs' : 'px-2.5 py-1.5 text-base'}`}
+          style={{ backgroundColor: courierColor(order.courier) }}
+        >
+          <Truck className={shrink ? 'h-3 w-3' : 'h-4 w-4'} />
+          {order.courier ?? 'Courier not assigned'}
+        </span>
+      )}
+      {order.createdAt && (
+        <span className={`text-right text-gray-500 ${labelSize}`}>
+          Ship Date
+          <br />
+          <span className="font-medium text-black">
+            {new Date(order.createdAt).toLocaleDateString(undefined, {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })}
+          </span>
+        </span>
+      )}
+    </div>
+  );
+
+  const barcode = order.trackingNumber && (
+    <div className={`flex flex-col items-center border-b border-black ${sectionPad}`}>
+      <BarcodeBlock
+        value={getTrackingBarcodeValue(order.trackingNumber)}
+        onRendered={onRendered}
+        height={barcodeHeight}
+        fontSize={barcodeFontSize}
+      />
+    </div>
+  );
+
+  const fromTo = (
+    <div className={`grid grid-cols-2 gap-3 border-b border-black ${sectionPad}`}>
+      <div className="min-w-0">
+        <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>From</p>
+        {order.storeName || company ? (
+          <>
+            <p className="font-medium">{order.storeName ?? company?.name}</p>
+            {company?.address && <p>{company.address}</p>}
+          </>
+        ) : (
+          <p className="text-gray-400">—</p>
+        )}
+      </div>
+      <div className="min-w-0">
+        <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>To</p>
+        <p className="font-medium">{order.customerName}</p>
+        <p>{addressLine(order.address)}</p>
+        {order.phone && <p>{order.phone}</p>}
+      </div>
+    </div>
+  );
+
+  const paymentQr = (
+    <div className={`flex items-center justify-between gap-3 border-b border-black ${sectionPad}`}>
+      <div>
+        <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>Payment</p>
+        <p className="font-medium">{order.paymentMethod ?? '—'}</p>
+      </div>
+      <QRBlock value={getOrderQrPayload(order)} onRendered={onRendered} size={qrSize} />
+    </div>
+  );
+
+  const orderIdSignature = (
+    <div className={`flex items-center justify-between gap-3 border-b border-dashed border-black ${sectionPad}`}>
+      <div>
+        <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>Order ID</p>
+        <p className="font-mono font-medium">{order.orderNumber}</p>
+      </div>
+      <div className={`border border-black text-center text-gray-400 ${shrink ? 'w-20 py-1 text-[8px]' : 'w-28 py-2 text-[9px]'}`}>
+        Signature
+      </div>
+    </div>
+  );
+
+  const productDetails = items.length > 0 && (
+    <div className={landscape ? 'col-span-2 pt-1.5' : 'pt-3'}>
+      <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>Product Details</p>
+      <ul>
+        {items.map((item, i) => (
+          <li key={i}>
+            {item?.quantity ?? 0}× {item?.title ?? 'Item'} {item?.sku ? `(${item.sku})` : ''}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 
   return (
     <div
-      className={`waybill-label flex flex-col font-sans ${textSize} leading-snug text-black`}
+      className={`waybill-label font-sans ${textSize} leading-snug text-black ${landscape ? 'grid grid-cols-2 gap-x-4' : 'flex flex-col'}`}
       style={{ minHeight: `${heightMm}mm` }}
     >
-      <div className="flex flex-1 flex-col justify-between">
-        <div className="flex items-center justify-between border-b-2 border-black pb-2">
-          {courierLogo(order.courier) ? (
-            // eslint-disable-next-line @next/next/no-img-element -- static SVG from /public, printed output doesn't benefit from next/image
-            <img
-              src={courierLogo(order.courier)}
-              alt={order.courier ?? ''}
-              className={compact ? 'h-6 max-w-[130px] object-contain object-left' : 'h-9 max-w-[180px] object-contain object-left'}
-            />
-          ) : (
-            <span
-              className={`flex items-center gap-1.5 rounded font-bold tracking-tight text-white uppercase ${compact ? 'px-2 py-1 text-xs' : 'px-2.5 py-1.5 text-base'}`}
-              style={{ backgroundColor: courierColor(order.courier) }}
-            >
-              <Truck className={compact ? 'h-3 w-3' : 'h-4 w-4'} />
-              {order.courier ?? 'Courier not assigned'}
-            </span>
-          )}
-          {order.createdAt && (
-            <span className={`text-right text-gray-500 ${labelSize}`}>
-              Ship Date
-              <br />
-              <span className="font-medium text-black">
-                {new Date(order.createdAt).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
-              </span>
-            </span>
-          )}
+      {landscape ? (
+        <>
+          {header}
+          {barcode}
+          {fromTo}
+          {paymentQr}
+          {orderIdSignature}
+          {productDetails}
+        </>
+      ) : (
+        <div className="flex flex-1 flex-col justify-between">
+          {header}
+          {barcode}
+          {fromTo}
+          {paymentQr}
+          {orderIdSignature}
+          {productDetails}
         </div>
-
-        {order.trackingNumber && (
-          <div className="flex flex-col items-center border-b border-black py-3">
-            <BarcodeBlock
-              value={getTrackingBarcodeValue(order.trackingNumber)}
-              onRendered={onRendered}
-              height={barcodeHeight}
-              fontSize={barcodeFontSize}
-            />
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3 border-b border-black py-3">
-          <div className="min-w-0">
-            <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>From</p>
-            {order.storeName || company ? (
-              <>
-                <p className="font-medium">{order.storeName ?? company?.name}</p>
-                {company?.address && <p>{company.address}</p>}
-              </>
-            ) : (
-              <p className="text-gray-400">—</p>
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>To</p>
-            <p className="font-medium">{order.customerName}</p>
-            <p>{addressLine(order.address)}</p>
-            {order.phone && <p>{order.phone}</p>}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-3 border-b border-black py-3">
-          <div>
-            <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>Payment</p>
-            <p className="font-medium">{order.paymentMethod ?? '—'}</p>
-          </div>
-          <QRBlock value={getOrderQrPayload(order)} onRendered={onRendered} size={qrSize} />
-        </div>
-
-        <div className="flex items-center justify-between gap-3 border-b border-dashed border-black py-3">
-          <div>
-            <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>Order ID</p>
-            <p className="font-mono font-medium">{order.orderNumber}</p>
-          </div>
-          <div className={`border border-black text-center text-gray-400 ${compact ? 'w-20 py-1 text-[8px]' : 'w-28 py-2 text-[9px]'}`}>
-            Signature
-          </div>
-        </div>
-
-        {items.length > 0 && (
-          <div className="pt-3">
-            <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>Product Details</p>
-            <ul>
-              {items.map((item, i) => (
-                <li key={i}>
-                  {item?.quantity ?? 0}× {item?.title ?? 'Item'} {item?.sku ? `(${item.sku})` : ''}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -344,6 +374,7 @@ export function PrintPreviewDocument({
                 order={order}
                 heightMm={heightMm}
                 compact={labelsPerPage === 2}
+                landscape={orientation === 'landscape'}
                 company={company}
                 onRendered={handleRendered}
               />
