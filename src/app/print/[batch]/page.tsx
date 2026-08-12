@@ -7,6 +7,8 @@ import {
   PAPER_SIZES,
   type PaperSize,
   type PrintOrder,
+  type Orientation,
+  type LabelsPerPage,
 } from '@/components/print-preview-document';
 
 interface PrintCompany {
@@ -35,6 +37,13 @@ function PrintBatchPageContent() {
     ? (paperSizeParam as PaperSize)
     : '4x6';
   const documentType = searchParams.get('documentType') === 'packing_slip' ? 'packing_slip' : 'waybill';
+  const orientation: Orientation = searchParams.get('orientation') === 'landscape' ? 'landscape' : 'portrait';
+  const labelsPerPage: LabelsPerPage = searchParams.get('labelsPerPage') === '2' ? 2 : 1;
+  const copiesParam = Number(searchParams.get('copies'));
+  const copies = Number.isInteger(copiesParam) && copiesParam >= 1 && copiesParam <= 10 ? copiesParam : 1;
+  const grayscale = searchParams.get('grayscale') === '1';
+  const fitToPage = searchParams.get('fitToPage') !== '0';
+  const cutLine = searchParams.get('cutLine') === '1';
   const batch = params.batch;
 
   useEffect(() => {
@@ -124,6 +133,12 @@ function PrintBatchPageContent() {
       documentType={documentType}
       company={company}
       onAllRendered={triggerPrint}
+      orientation={orientation}
+      labelsPerPage={labelsPerPage}
+      copies={copies}
+      grayscale={grayscale}
+      fitToPage={fitToPage}
+      cutLine={cutLine}
     />
   );
 }

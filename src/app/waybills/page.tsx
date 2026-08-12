@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   FileText,
   Filter,
@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Download,
   Sparkles,
+  Loader2,
 } from 'lucide-react';
 import { AppShell } from '@/components/app-shell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +23,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { StatusBadge } from '@/components/status-badge';
 import { PlatformIcon, type Platform } from '@/components/platform-icon';
-import { PrintPreviewDocument, PAPER_SIZES, type PaperSize, type PrintOrder } from '@/components/print-preview-document';
+import {
+  PrintPreviewDocument,
+  PAPER_SIZES,
+  type PaperSize,
+  type PrintOrder,
+  type Orientation,
+  type LabelsPerPage,
+} from '@/components/print-preview-document';
 import type { OrderRow } from '@/components/order-table';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +39,17 @@ const PAPER_SIZE_LABELS: Record<PaperSize, string> = {
   a6: 'A6',
   a5: 'A5',
   letter: 'Letter',
+};
+
+// Physical page dimensions in mm, portrait orientation — swapped for
+// landscape. Kept in sync with print-preview-document.tsx's own copy since
+// jsPDF needs the same numbers to size its pages, and that component doesn't
+// export them.
+const PAGE_DIMENSIONS_MM: Record<PaperSize, { w: number; h: number }> = {
+  '4x6': { w: 101.6, h: 152.4 },
+  a6: { w: 105, h: 148 },
+  a5: { w: 148, h: 210 },
+  letter: { w: 215.9, h: 279.4 },
 };
 
 const DOCUMENT_TYPES = [
@@ -74,6 +93,15 @@ export default function WaybillsPage() {
   const [previewIndex, setPreviewIndex] = useState(0);
   const [previewOrder, setPreviewOrder] = useState<PrintOrder | null>(null);
 
+  const [labelsPerPage, setLabelsPerPage] = useState<LabelsPerPage>(1);
+  const [orientation, setOrientation] = useState<Orientation>('portrait');
+  const [copies, setCopies] = useState(1);
+  const [grayscale, setGrayscale] = useState(false);
+  const [fitToPage, setFitToPage] = useState(true);
+  const [cutLine, setCutLine] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     fetch(`/api/orders?sort=${sort}`)
       .then((res) => res.json())
@@ -111,11 +139,92 @@ export default function WaybillsPage() {
 
   function printSelected() {
     const ids = Array.from(selected).join(',');
-    window.open(`/print/${ids}?paperSize=${paperSize}&documentType=${documentType}`, '_blank');
+    const params = new URLSearchParams({
+      paperSize,
+      documentType,
+      orientation,
+      labelsPerPage: String(labelsPerPage),
+      copies: String(copies),
+      grayscale: grayscale ? '1' : '0',
+      fitToPage: fitToPage ? '1' : '0',
+      cutLine: cutLine ? '1' : '0',
+    });
+    window.open(`/print/${ids}?${params.toString()}`, '_blank');
   }
 
-  const totalWaybills = selected.size;
-  const totalPages = selected.size; // 1 label per page — the only layout the print pipeline supports today
+  async function downloadPdf() {
+    if (selected.size === 0 || downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      const ids = Array.from(selected);
+      const results = await Promise.all(
+        ids.map((id) =>
+          fetch(`/api/orders/${id}`)
+            .then((res) => res.json())
+            .catch(() => null)
+        )
+      );
+      const fetchedOrders = results
+        .map((result) => (result as { order?: PrintOrder } | null)?.order)
+        .filter((order): order is PrintOrder => Boolean(order));
+      if (fetchedOrders.length === 0) return;
+
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas-pro'),
+      ]);
+
+      const container = pdfContainerRef.current;
+      if (!container) return;
+
+      // Rendered off-screen (see the fixed, translated-out-of-view wrapper
+      // below) so html2canvas can rasterize the exact same markup the real
+      // print flow uses, without it ever being visible on the page.
+      const { createRoot } = await import('react-dom/client');
+      const root = createRoot(container);
+      await new Promise<void>((resolve) => {
+        root.render(
+          <PrintPreviewDocument
+            orders={fetchedOrders}
+            paperSize={paperSize}
+            documentType={documentType}
+            orientation={orientation}
+            labelsPerPage={labelsPerPage}
+            copies={copies}
+            grayscale={grayscale}
+            fitToPage={fitToPage}
+            cutLine={cutLine}
+            onAllRendered={resolve}
+          />
+        );
+      });
+      // One more frame so the just-drawn barcode/QR canvases are painted
+      // before html2canvas snapshots them.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const { w: pageW, h: pageH } =
+        orientation === 'landscape'
+          ? { w: PAGE_DIMENSIONS_MM[paperSize].h, h: PAGE_DIMENSIONS_MM[paperSize].w }
+          : PAGE_DIMENSIONS_MM[paperSize];
+
+      const pdf = new jsPDF({ unit: 'mm', format: [pageW, pageH], orientation: pageW > pageH ? 'landscape' : 'portrait' });
+      const pageEls = container.querySelectorAll<HTMLElement>('.print-section');
+      for (let i = 0; i < pageEls.length; i++) {
+        const canvas = await html2canvas(pageEls[i], { scale: 2, backgroundColor: '#ffffff' });
+        const imgData = canvas.toDataURL('image/png');
+        if (i > 0) pdf.addPage([pageW, pageH]);
+        pdf.addImage(imgData, 'PNG', 0, 0, pageW, pageH);
+      }
+      pdf.save(`waybills-${new Date().toISOString().slice(0, 10)}.pdf`);
+
+      root.unmount();
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
+  const totalWaybills = selected.size * copies;
+  const totalPages = Math.ceil(totalWaybills / labelsPerPage);
 
   return (
     <AppShell>
@@ -304,10 +413,10 @@ export default function WaybillsPage() {
                           {/*
                             PrintPreviewDocument renders at true physical size
                             (it must, for the real print flow at /print/[batch])
-                            and now deliberately fills the full page height for
-                            each paper size — scaled down as a unit so the card
-                            shows the whole label with no empty space, instead
-                            of clipping it to a fixed preview height.
+                            and fills the full page height for each paper size
+                            — scaled down as a unit so the card shows the whole
+                            label with no empty space, instead of clipping it
+                            to a fixed preview height.
                           */}
                           <div className="p-4">
                             {/*
@@ -318,7 +427,16 @@ export default function WaybillsPage() {
                               the visually-shrunk label.
                             */}
                             <div style={{ zoom: 0.55 }}>
-                              <PrintPreviewDocument orders={[previewOrder]} paperSize={paperSize} documentType={documentType} />
+                              <PrintPreviewDocument
+                                orders={[previewOrder]}
+                                paperSize={paperSize}
+                                documentType={documentType}
+                                orientation={orientation}
+                                labelsPerPage={labelsPerPage}
+                                grayscale={grayscale}
+                                fitToPage={fitToPage}
+                                cutLine={cutLine}
+                              />
                             </div>
                           </div>
                         </div>
@@ -447,42 +565,122 @@ export default function WaybillsPage() {
                 </div>
 
                 <div className="space-y-1.5 border-t pt-4">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-muted-foreground">Layout</label>
-                    <span className="text-[10px] text-muted-foreground">Coming soon</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2" title="Multi-label layouts are coming in a future update">
-                    <span className="flex h-8 items-center justify-center rounded-[8px] border border-primary bg-primary/5 text-xs font-medium text-primary">
+                  <label className="text-xs font-medium text-muted-foreground">Layout</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setLabelsPerPage(1)}
+                      className={cn(
+                        'flex h-8 items-center justify-center rounded-[8px] border text-xs font-medium transition-colors',
+                        labelsPerPage === 1
+                          ? 'border-primary bg-primary/5 text-primary'
+                          : 'text-muted-foreground hover:bg-muted'
+                      )}
+                    >
                       1 Label per Page
-                    </span>
-                    <span className="flex h-8 items-center justify-center rounded-[8px] border text-xs text-muted-foreground opacity-50">
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLabelsPerPage(2)}
+                      className={cn(
+                        'flex h-8 items-center justify-center rounded-[8px] border text-xs font-medium transition-colors',
+                        labelsPerPage === 2
+                          ? 'border-primary bg-primary/5 text-primary'
+                          : 'text-muted-foreground hover:bg-muted'
+                      )}
+                    >
                       2 Labels per Page
-                    </span>
+                    </button>
                   </div>
                 </div>
 
-                <div
-                  className="grid grid-cols-2 gap-3 opacity-50"
-                  title="Orientation, copies, and these printing options aren't wired up to the print pipeline yet"
-                >
+                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Orientation</label>
-                    <div className="flex h-8 items-center justify-center rounded-[8px] border text-xs">Portrait</div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setOrientation('portrait')}
+                        className={cn(
+                          'flex h-8 items-center justify-center rounded-[8px] border text-xs font-medium transition-colors',
+                          orientation === 'portrait'
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'text-muted-foreground hover:bg-muted'
+                        )}
+                      >
+                        Portrait
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOrientation('landscape')}
+                        className={cn(
+                          'flex h-8 items-center justify-center rounded-[8px] border text-xs font-medium transition-colors',
+                          orientation === 'landscape'
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'text-muted-foreground hover:bg-muted'
+                        )}
+                      >
+                        Landscape
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Copies per Order</label>
-                    <div className="flex h-8 items-center justify-center rounded-[8px] border text-xs">1</div>
+                    <div className="flex h-8 items-center justify-between rounded-[8px] border px-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setCopies((c) => Math.max(1, c - 1))}
+                        aria-label="Decrease copies"
+                        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                        disabled={copies <= 1}
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="font-mono text-xs">{copies}</span>
+                      <button
+                        type="button"
+                        onClick={() => setCopies((c) => Math.min(10, c + 1))}
+                        aria-label="Increase copies"
+                        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                        disabled={copies >= 10}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-2 opacity-50" title="Not wired up to the print pipeline yet">
+                <div className="space-y-2">
                   <label className="text-xs font-medium text-muted-foreground">Printing Options</label>
-                  {['Grayscale', 'Fit to page', 'Add cut line'].map((opt) => (
-                    <label key={opt} className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" disabled className="h-4 w-4 rounded border-input" />
-                      {opt}
-                    </label>
-                  ))}
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={grayscale}
+                      onChange={(e) => setGrayscale(e.target.checked)}
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    Grayscale
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={fitToPage}
+                      onChange={(e) => setFitToPage(e.target.checked)}
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    Fit to page
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={cutLine}
+                      onChange={(e) => setCutLine(e.target.checked)}
+                      disabled={labelsPerPage !== 2}
+                      className="h-4 w-4 rounded border-input disabled:opacity-40"
+                    />
+                    Add cut line
+                    {labelsPerPage !== 2 && <span className="text-xs text-muted-foreground">(needs 2 per page)</span>}
+                  </label>
                 </div>
 
                 <div className="space-y-2 border-t pt-4">
@@ -494,11 +692,11 @@ export default function WaybillsPage() {
                   <Button
                     variant="outline"
                     className="w-full"
-                    disabled
-                    title="Direct PDF export is coming — use Print → Save as PDF in the print dialog for now"
+                    onClick={downloadPdf}
+                    disabled={selected.size === 0 || downloadingPdf}
                   >
-                    <Download className="h-4 w-4" />
-                    Download PDF
+                    {downloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    {downloadingPdf ? 'Generating PDF…' : 'Download PDF'}
                   </Button>
                 </div>
               </CardContent>
@@ -520,6 +718,11 @@ export default function WaybillsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Off-screen render target for PDF export — html2canvas needs the
+          document actually laid out in the DOM to rasterize it, so this is
+          positioned far outside the viewport rather than display:none. */}
+      <div ref={pdfContainerRef} className="fixed top-0 left-[-99999px]" aria-hidden="true" />
     </AppShell>
   );
 }

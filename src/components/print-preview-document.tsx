@@ -38,27 +38,32 @@ function courierColor(courier: string | null): string {
 }
 
 export type PaperSize = '4x6' | 'a6' | 'a5' | 'letter';
+export type Orientation = 'portrait' | 'landscape';
+export type LabelsPerPage = 1 | 2;
 
 export const PAPER_SIZES: PaperSize[] = ['4x6', 'a6', 'a5', 'letter'];
 
-const PAGE_SIZES: Record<PaperSize, string> = {
-  '4x6': '4in 6in',
-  a6: '105mm 148mm',
-  a5: '148mm 210mm',
-  letter: '8.5in 11in',
+// Physical page dimensions in portrait orientation — swapped for landscape.
+const PAGE_DIMENSIONS_MM: Record<PaperSize, { w: number; h: number }> = {
+  '4x6': { w: 101.6, h: 152.4 },
+  a6: { w: 105, h: 148 },
+  a5: { w: 148, h: 210 },
+  letter: { w: 215.9, h: 279.4 },
 };
 
-// Content-box height for each paper size (page height minus the 8mm top +
-// 8mm bottom @page margin below). Forcing the waybill section to this exact
-// height, then spreading its blocks with justify-between, is what makes the
-// printed label fill the physical page edge-to-edge instead of leaving dead
-// space under a short block list.
-const PAGE_CONTENT_HEIGHT_MM: Record<PaperSize, number> = {
-  '4x6': 152.4 - 16, // 6in
-  a6: 148 - 16,
-  a5: 210 - 16,
-  letter: 279.4 - 16, // 11in
-};
+const PAGE_MARGIN_MM = 8;
+const CUT_LINE_GAP_MM = 6;
+
+function pageDimensions(paperSize: PaperSize, orientation: Orientation) {
+  const { w, h } = PAGE_DIMENSIONS_MM[paperSize];
+  return orientation === 'landscape' ? { w: h, h: w } : { w, h };
+}
+
+function labelContentHeightMm(paperSize: PaperSize, orientation: Orientation, labelsPerPage: LabelsPerPage) {
+  const { h } = pageDimensions(paperSize, orientation);
+  const usable = h - PAGE_MARGIN_MM * 2;
+  return labelsPerPage === 2 ? (usable - CUT_LINE_GAP_MM) / 2 : usable;
+}
 
 export interface PrintOrder {
   id: string;
@@ -92,6 +97,20 @@ interface PrintPreviewDocumentProps {
    * can't capture half-drawn canvases.
    */
   onAllRendered?: () => void;
+  orientation?: Orientation;
+  labelsPerPage?: LabelsPerPage;
+  /** Each selected order is repeated this many times in the printed batch. */
+  copies?: number;
+  /** Converts the whole document to grayscale — useful for thermal/mono printers. */
+  grayscale?: boolean;
+  /**
+   * When true (default), the exact physical page size is enforced via
+   * `@page { size }`. Turning it off omits that rule so the browser's print
+   * dialog / printer default paper handling takes over instead.
+   */
+  fitToPage?: boolean;
+  /** Draws a dashed cut line between the two labels when labelsPerPage is 2. */
+  cutLine?: boolean;
 }
 
 function addressLine(address: Record<string, unknown> | null | undefined): string {
@@ -104,18 +123,150 @@ function addressLine(address: Record<string, unknown> | null | undefined): strin
     .join(', ');
 }
 
+function WaybillLabel({
+  order,
+  heightMm,
+  compact,
+  company,
+  onRendered,
+}: {
+  order: PrintOrder;
+  heightMm: number;
+  compact: boolean;
+  company?: { name: string; address: string | null };
+  onRendered: () => void;
+}) {
+  const items = Array.isArray(order.items) ? order.items : [];
+  const barcodeHeight = compact ? 40 : 64;
+  const barcodeFontSize = compact ? 12 : 14;
+  const qrSize = compact ? 88 : 128;
+  const textSize = compact ? 'text-[11px]' : 'text-[13px]';
+  const labelSize = compact ? 'text-[9px]' : 'text-[10px]';
+
+  return (
+    <div
+      className={`waybill-label flex flex-col font-sans ${textSize} leading-snug text-black`}
+      style={{ minHeight: `${heightMm}mm` }}
+    >
+      <div className="flex flex-1 flex-col justify-between">
+        <div className="flex items-center justify-between border-b-2 border-black pb-2">
+          {courierLogo(order.courier) ? (
+            // eslint-disable-next-line @next/next/no-img-element -- static SVG from /public, printed output doesn't benefit from next/image
+            <img
+              src={courierLogo(order.courier)}
+              alt={order.courier ?? ''}
+              className={compact ? 'h-6 max-w-[130px] object-contain object-left' : 'h-9 max-w-[180px] object-contain object-left'}
+            />
+          ) : (
+            <span
+              className={`flex items-center gap-1.5 rounded font-bold tracking-tight text-white uppercase ${compact ? 'px-2 py-1 text-xs' : 'px-2.5 py-1.5 text-base'}`}
+              style={{ backgroundColor: courierColor(order.courier) }}
+            >
+              <Truck className={compact ? 'h-3 w-3' : 'h-4 w-4'} />
+              {order.courier ?? 'Courier not assigned'}
+            </span>
+          )}
+          {order.createdAt && (
+            <span className={`text-right text-gray-500 ${labelSize}`}>
+              Ship Date
+              <br />
+              <span className="font-medium text-black">
+                {new Date(order.createdAt).toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </span>
+            </span>
+          )}
+        </div>
+
+        {order.trackingNumber && (
+          <div className="flex flex-col items-center border-b border-black py-3">
+            <BarcodeBlock
+              value={getTrackingBarcodeValue(order.trackingNumber)}
+              onRendered={onRendered}
+              height={barcodeHeight}
+              fontSize={barcodeFontSize}
+            />
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3 border-b border-black py-3">
+          <div className="min-w-0">
+            <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>From</p>
+            {order.storeName || company ? (
+              <>
+                <p className="font-medium">{order.storeName ?? company?.name}</p>
+                {company?.address && <p>{company.address}</p>}
+              </>
+            ) : (
+              <p className="text-gray-400">—</p>
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>To</p>
+            <p className="font-medium">{order.customerName}</p>
+            <p>{addressLine(order.address)}</p>
+            {order.phone && <p>{order.phone}</p>}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-b border-black py-3">
+          <div>
+            <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>Payment</p>
+            <p className="font-medium">{order.paymentMethod ?? '—'}</p>
+          </div>
+          <QRBlock value={getOrderQrPayload(order)} onRendered={onRendered} size={qrSize} />
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-b border-dashed border-black py-3">
+          <div>
+            <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>Order ID</p>
+            <p className="font-mono font-medium">{order.orderNumber}</p>
+          </div>
+          <div className={`border border-black text-center text-gray-400 ${compact ? 'w-20 py-1 text-[8px]' : 'w-28 py-2 text-[9px]'}`}>
+            Signature
+          </div>
+        </div>
+
+        {items.length > 0 && (
+          <div className="pt-3">
+            <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>Product Details</p>
+            <ul>
+              {items.map((item, i) => (
+                <li key={i}>
+                  {item?.quantity ?? 0}× {item?.title ?? 'Item'} {item?.sku ? `(${item.sku})` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function PrintPreviewDocument({
   orders,
   paperSize,
   documentType,
   company,
   onAllRendered,
+  orientation = 'portrait',
+  labelsPerPage = 1,
+  copies = 1,
+  grayscale = false,
+  fitToPage = true,
+  cutLine = false,
 }: PrintPreviewDocumentProps) {
+  const expandedOrders = copies > 1 ? orders.flatMap((order) => Array(copies).fill(order) as PrintOrder[]) : orders;
+
   // One QR per order, plus one barcode per waybill order that actually has a
   // tracking number to encode.
   const expectedRenders =
-    orders.length +
-    (documentType === 'waybill' ? orders.filter((order) => order.trackingNumber).length : 0);
+    expandedOrders.length +
+    (documentType === 'waybill' ? expandedOrders.filter((order) => order.trackingNumber).length : 0);
 
   const renderedCount = useRef(0);
   const alreadyFired = useRef(false);
@@ -128,15 +279,14 @@ export function PrintPreviewDocument({
     }
   }, [expectedRenders, onAllRendered]);
 
-  return (
-    <div>
-      <style>{`@page { size: ${PAGE_SIZES[paperSize]}; margin: 8mm; } .print-section:not(:last-child) { page-break-after: always; }`}</style>
-      {orders.map((order) => {
-        const items = Array.isArray(order.items) ? order.items : [];
-
-        if (documentType !== 'waybill') {
+  if (documentType !== 'waybill') {
+    return (
+      <div>
+        <style>{`@page { ${fitToPage ? `size: ${PAGE_DIMENSIONS_MM[paperSize].w}mm ${PAGE_DIMENSIONS_MM[paperSize].h}mm; ` : ''}margin: ${PAGE_MARGIN_MM}mm; } .print-section:not(:last-child) { page-break-after: always; } ${grayscale ? '.print-section { filter: grayscale(1); }' : ''}`}</style>
+        {expandedOrders.map((order, i) => {
+          const items = Array.isArray(order.items) ? order.items : [];
           return (
-            <section key={order.id} className="print-section p-2 font-sans text-sm">
+            <section key={`${order.id}-${i}`} className="print-section p-2 font-sans text-sm">
               {company && (
                 <header className="mb-2 border-b pb-1">
                   <p className="font-semibold">{company.name}</p>
@@ -148,8 +298,8 @@ export function PrintPreviewDocument({
               <p>{order.phone ?? ''}</p>
               <p>{addressLine(order.address)}</p>
               <ul className="mt-2">
-                {items.map((item, i) => (
-                  <li key={i}>
+                {items.map((item, j) => (
+                  <li key={j}>
                     {item?.quantity ?? 0}× {item?.title ?? 'Item'} {item?.sku ? `(${item.sku})` : ''}
                   </li>
                 ))}
@@ -159,101 +309,44 @@ export function PrintPreviewDocument({
               </div>
             </section>
           );
-        }
+        })}
+      </div>
+    );
+  }
 
-        return (
-          <section
-            key={order.id}
-            className="print-section flex flex-col p-4 font-sans text-[13px] leading-snug text-black"
-            style={{ minHeight: `${PAGE_CONTENT_HEIGHT_MM[paperSize]}mm` }}
-          >
-            <div className="flex flex-1 flex-col justify-between">
-              <div className="flex items-center justify-between border-b-2 border-black pb-2">
-                {courierLogo(order.courier) ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- static SVG from /public, printed output doesn't benefit from next/image
-                  <img src={courierLogo(order.courier)} alt={order.courier ?? ''} className="h-9 max-w-[180px] object-contain object-left" />
-                ) : (
-                  <span
-                    className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-base font-bold tracking-tight text-white uppercase"
-                    style={{ backgroundColor: courierColor(order.courier) }}
-                  >
-                    <Truck className="h-4 w-4" />
-                    {order.courier ?? 'Courier not assigned'}
-                  </span>
-                )}
-                {order.createdAt && (
-                  <span className="text-right text-[10px] text-gray-500">
-                    Ship Date
-                    <br />
-                    <span className="font-medium text-black">
-                      {new Date(order.createdAt).toLocaleDateString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </span>
-                  </span>
-                )}
-              </div>
+  const heightMm = labelContentHeightMm(paperSize, orientation, labelsPerPage);
+  const { w: pageW, h: pageH } = pageDimensions(paperSize, orientation);
+  const pages: PrintOrder[][] = [];
+  for (let i = 0; i < expandedOrders.length; i += labelsPerPage) {
+    pages.push(expandedOrders.slice(i, i + labelsPerPage));
+  }
 
-              {order.trackingNumber && (
-                <div className="flex flex-col items-center border-b border-black py-3">
-                  <BarcodeBlock value={getTrackingBarcodeValue(order.trackingNumber)} onRendered={handleRendered} height={64} fontSize={14} />
+  return (
+    <div>
+      <style>{`@page { ${fitToPage ? `size: ${pageW}mm ${pageH}mm; ` : ''}margin: ${PAGE_MARGIN_MM}mm; } .print-section:not(:last-child) { page-break-after: always; } ${grayscale ? '.print-section { filter: grayscale(1); }' : ''}`}</style>
+      {pages.map((page, pageIndex) => (
+        <section key={pageIndex} className="print-section p-4">
+          {page.map((order, i) => (
+            <div key={`${order.id}-${pageIndex}-${i}`}>
+              {i > 0 && (
+                <div
+                  className={cutLine ? 'my-1 border-t border-dashed border-gray-400' : 'my-1'}
+                  style={{ height: `${CUT_LINE_GAP_MM}mm` }}
+                >
+                  {cutLine && <p className="text-center text-[8px] text-gray-400">✂ cut here</p>}
                 </div>
               )}
-
-              <div className="grid grid-cols-2 gap-3 border-b border-black py-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold tracking-wide text-gray-500 uppercase">From</p>
-                  {order.storeName || company ? (
-                    <>
-                      <p className="font-medium">{order.storeName ?? company?.name}</p>
-                      {company?.address && <p>{company.address}</p>}
-                    </>
-                  ) : (
-                    <p className="text-gray-400">—</p>
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold tracking-wide text-gray-500 uppercase">To</p>
-                  <p className="font-medium">{order.customerName}</p>
-                  <p>{addressLine(order.address)}</p>
-                  {order.phone && <p>{order.phone}</p>}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-3 border-b border-black py-3">
-                <div>
-                  <p className="text-[10px] font-semibold tracking-wide text-gray-500 uppercase">Payment</p>
-                  <p className="font-medium">{order.paymentMethod ?? '—'}</p>
-                </div>
-                <QRBlock value={getOrderQrPayload(order)} onRendered={handleRendered} size={128} />
-              </div>
-
-              <div className="flex items-center justify-between gap-3 border-b border-dashed border-black py-3">
-                <div>
-                  <p className="text-[10px] font-semibold tracking-wide text-gray-500 uppercase">Order ID</p>
-                  <p className="font-mono font-medium">{order.orderNumber}</p>
-                </div>
-                <div className="w-28 border border-black py-2 text-center text-[9px] text-gray-400">Signature</div>
-              </div>
-
-              {items.length > 0 && (
-                <div className="pt-3">
-                  <p className="text-[10px] font-semibold tracking-wide text-gray-500 uppercase">Product Details</p>
-                  <ul>
-                    {items.map((item, i) => (
-                      <li key={i}>
-                        {item?.quantity ?? 0}× {item?.title ?? 'Item'} {item?.sku ? `(${item.sku})` : ''}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <WaybillLabel
+                order={order}
+                heightMm={heightMm}
+                compact={labelsPerPage === 2}
+                company={company}
+                onRendered={handleRendered}
+              />
             </div>
-          </section>
-        );
-      })}
+          ))}
+        </section>
+      ))}
     </div>
   );
 }
