@@ -15,6 +15,8 @@ import {
   Download,
   Sparkles,
   Loader2,
+  RectangleVertical,
+  RectangleHorizontal,
 } from 'lucide-react';
 import { AppShell } from '@/components/app-shell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -407,7 +409,7 @@ export default function WaybillsPage() {
                       {previewLoading && <p className="text-sm text-muted-foreground">Loading preview…</p>}
                       {!previewLoading && previewOrder && (
                         <div
-                          className="mx-auto w-full max-w-[420px] overflow-hidden rounded-md border bg-white text-black shadow-sm"
+                          className="mx-auto w-fit max-w-full overflow-hidden rounded-md border bg-white text-black shadow-sm"
                           style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
                         >
                           {/*
@@ -416,7 +418,11 @@ export default function WaybillsPage() {
                             and fills the full page height for each paper size
                             — scaled down as a unit so the card shows the whole
                             label with no empty space, instead of clipping it
-                            to a fixed preview height.
+                            to a fixed preview height. `w-fit` (not a fixed
+                            max-width) so the card's own shape actually
+                            reflects portrait vs. landscape instead of always
+                            rendering at the same width regardless of
+                            orientation.
                           */}
                           <div className="p-4">
                             {/*
@@ -601,26 +607,32 @@ export default function WaybillsPage() {
                       <button
                         type="button"
                         onClick={() => setOrientation('portrait')}
+                        aria-label="Portrait"
+                        aria-pressed={orientation === 'portrait'}
+                        title="Portrait"
                         className={cn(
-                          'flex h-8 items-center justify-center rounded-[8px] border text-xs font-medium transition-colors',
+                          'flex h-8 items-center justify-center gap-1.5 rounded-[8px] border text-xs font-medium transition-colors',
                           orientation === 'portrait'
                             ? 'border-primary bg-primary/5 text-primary'
                             : 'text-muted-foreground hover:bg-muted'
                         )}
                       >
-                        Portrait
+                        <RectangleVertical className="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
                         onClick={() => setOrientation('landscape')}
+                        aria-label="Landscape"
+                        aria-pressed={orientation === 'landscape'}
+                        title="Landscape"
                         className={cn(
-                          'flex h-8 items-center justify-center rounded-[8px] border text-xs font-medium transition-colors',
+                          'flex h-8 items-center justify-center gap-1.5 rounded-[8px] border text-xs font-medium transition-colors',
                           orientation === 'landscape'
                             ? 'border-primary bg-primary/5 text-primary'
                             : 'text-muted-foreground hover:bg-muted'
                         )}
                       >
-                        Landscape
+                        <RectangleHorizontal className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>

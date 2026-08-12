@@ -54,7 +54,7 @@ const PAGE_DIMENSIONS_MM: Record<PaperSize, { w: number; h: number }> = {
 const PAGE_MARGIN_MM = 8;
 const CUT_LINE_GAP_MM = 6;
 
-function pageDimensions(paperSize: PaperSize, orientation: Orientation) {
+export function pageDimensions(paperSize: PaperSize, orientation: Orientation) {
   const { w, h } = PAGE_DIMENSIONS_MM[paperSize];
   return orientation === 'landscape' ? { w: h, h: w } : { w, h };
 }
@@ -325,7 +325,11 @@ export function PrintPreviewDocument({
     <div>
       <style>{`@page { ${fitToPage ? `size: ${pageW}mm ${pageH}mm; ` : ''}margin: ${PAGE_MARGIN_MM}mm; } .print-section:not(:last-child) { page-break-after: always; } ${grayscale ? '.print-section { filter: grayscale(1); }' : ''}`}</style>
       {pages.map((page, pageIndex) => (
-        <section key={pageIndex} className="print-section p-4">
+        <section
+          key={pageIndex}
+          className="print-section p-4"
+          style={{ width: `${pageW - PAGE_MARGIN_MM * 2}mm`, boxSizing: 'border-box' }}
+        >
           {page.map((order, i) => (
             <div key={`${order.id}-${pageIndex}-${i}`}>
               {i > 0 && (
