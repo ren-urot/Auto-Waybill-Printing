@@ -47,3 +47,4 @@ next-env.d.ts
 # local review screenshots
 .playwright-mcp/
 /*.png
+graphify-out/
