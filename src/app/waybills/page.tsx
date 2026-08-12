@@ -43,6 +43,16 @@ const PAPER_SIZE_LABELS: Record<PaperSize, string> = {
   letter: 'Letter',
 };
 
+// A6/A5/Letter are named sizes, not literal dimensions, so orientation
+// doesn't change how they're labeled — only the 4x6 thermal label's name
+// spells out its actual inches, which swap with the page's own width/height.
+function paperSizeLabel(size: PaperSize, orientation: Orientation): string {
+  if (size === '4x6') {
+    return orientation === 'landscape' ? '6×4 in (thermal label)' : '4×6 in (thermal label)';
+  }
+  return PAPER_SIZE_LABELS[size];
+}
+
 // Physical page dimensions in mm, portrait orientation — swapped for
 // landscape. Kept in sync with print-preview-document.tsx's own copy since
 // jsPDF needs the same numbers to size its pages, and that component doesn't
@@ -547,7 +557,7 @@ export default function WaybillsPage() {
                     <SelectContent>
                       {PAPER_SIZES.map((size) => (
                         <SelectItem key={size} value={size}>
-                          {PAPER_SIZE_LABELS[size]}
+                          {paperSizeLabel(size, orientation)}
                         </SelectItem>
                       ))}
                     </SelectContent>
