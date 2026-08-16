@@ -14,6 +14,7 @@ const PAPER_SIZE_LABELS: Record<PaperSize, string> = {
   '4x6': '4×6 in (thermal label)',
   a6: 'A6',
   a5: 'A5',
+  a4: 'A4',
   letter: 'Letter',
 };
 

@@ -11,7 +11,7 @@ import { MOCK_PRINT_HISTORY } from '@/lib/demo/mock-data';
 
 const printHistoryBodySchema = z.object({
   orderIds: z.array(z.uuid()).min(1),
-  paperSize: z.enum(['4x6', 'a6', 'a5', 'letter']),
+  paperSize: z.enum(['4x6', 'a6', 'a5', 'a4', 'letter']),
   documentType: z.enum(['waybill', 'packing_slip']),
 });
 

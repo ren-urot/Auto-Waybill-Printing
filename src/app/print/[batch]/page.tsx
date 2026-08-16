@@ -38,13 +38,20 @@ function PrintBatchPageContent() {
     : '4x6';
   const documentType = searchParams.get('documentType') === 'packing_slip' ? 'packing_slip' : 'waybill';
   const orientation: Orientation = searchParams.get('orientation') === 'landscape' ? 'landscape' : 'portrait';
-  const labelsPerPage: LabelsPerPage = searchParams.get('labelsPerPage') === '2' ? 2 : 1;
+  const labelsPerPageParam = searchParams.get('labelsPerPage');
+  const labelsPerPage: LabelsPerPage =
+    labelsPerPageParam === '2' || labelsPerPageParam === '4' || labelsPerPageParam === '6'
+      ? (Number(labelsPerPageParam) as LabelsPerPage)
+      : 1;
   const copiesParam = Number(searchParams.get('copies'));
   const copies = Number.isInteger(copiesParam) && copiesParam >= 1 && copiesParam <= 10 ? copiesParam : 1;
   const grayscale = searchParams.get('grayscale') === '1';
   const fitToPage = searchParams.get('fitToPage') !== '0';
   const cutLine = searchParams.get('cutLine') === '1';
-  const batch = params.batch;
+  // useParams() can hand back this segment still percent-encoded (e.g. `,`
+  // as `%2C`), which silently defeats a plain split(',') and treats the
+  // whole batch as a single (nonexistent) order id.
+  const batch = decodeURIComponent(params.batch);
 
   useEffect(() => {
     let cancelled = false;

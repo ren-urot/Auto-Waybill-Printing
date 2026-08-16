@@ -9,7 +9,7 @@ const settingsBodySchema = z.object({
   companyLogoUrl: z.string().nullish(),
   companyAddress: z.string().nullish(),
   taxInfo: z.string().nullish(),
-  defaultPaperSize: z.enum(['4x6', 'a6', 'a5', 'letter']).optional(),
+  defaultPaperSize: z.enum(['4x6', 'a6', 'a5', 'a4', 'letter']).optional(),
   defaultCourier: z.string().nullish(),
 });
 

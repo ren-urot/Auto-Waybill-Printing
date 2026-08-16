@@ -40,6 +40,7 @@ const PAPER_SIZE_LABELS: Record<PaperSize, string> = {
   '4x6': '4×6 in (thermal label)',
   a6: 'A6',
   a5: 'A5',
+  a4: 'A4',
   letter: 'Letter',
 };
 
@@ -61,6 +62,7 @@ const PAGE_DIMENSIONS_MM: Record<PaperSize, { w: number; h: number }> = {
   '4x6': { w: 101.6, h: 152.4 },
   a6: { w: 105, h: 148 },
   a5: { w: 148, h: 210 },
+  a4: { w: 210, h: 297 },
   letter: { w: 215.9, h: 279.4 },
 };
 
@@ -607,6 +609,30 @@ export default function WaybillsPage() {
                     >
                       2 Labels per Page
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setLabelsPerPage(4)}
+                      className={cn(
+                        'flex h-8 items-center justify-center rounded-[8px] border text-xs font-medium transition-colors',
+                        labelsPerPage === 4
+                          ? 'border-primary bg-primary/5 text-primary'
+                          : 'text-muted-foreground hover:bg-muted'
+                      )}
+                    >
+                      4 Labels per Page
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLabelsPerPage(6)}
+                      className={cn(
+                        'flex h-8 items-center justify-center rounded-[8px] border text-xs font-medium transition-colors',
+                        labelsPerPage === 6
+                          ? 'border-primary bg-primary/5 text-primary'
+                          : 'text-muted-foreground hover:bg-muted'
+                      )}
+                    >
+                      6 Labels per Page
+                    </button>
                   </div>
                 </div>
 
@@ -697,11 +723,11 @@ export default function WaybillsPage() {
                       type="checkbox"
                       checked={cutLine}
                       onChange={(e) => setCutLine(e.target.checked)}
-                      disabled={labelsPerPage !== 2}
+                      disabled={labelsPerPage === 1}
                       className="h-4 w-4 rounded border-input disabled:opacity-40"
                     />
                     Add cut line
-                    {labelsPerPage !== 2 && <span className="text-xs text-muted-foreground">(needs 2 per page)</span>}
+                    {labelsPerPage === 1 && <span className="text-xs text-muted-foreground">(needs 2+ per page)</span>}
                   </label>
                 </div>
 

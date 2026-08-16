@@ -37,32 +37,47 @@ function courierColor(courier: string | null): string {
   return COURIER_COLORS[courier?.trim().toLowerCase() ?? ''] ?? '#374151';
 }
 
-export type PaperSize = '4x6' | 'a6' | 'a5' | 'letter';
+export type PaperSize = '4x6' | 'a6' | 'a5' | 'a4' | 'letter';
 export type Orientation = 'portrait' | 'landscape';
-export type LabelsPerPage = 1 | 2;
+export type LabelsPerPage = 1 | 2 | 4 | 6;
 
-export const PAPER_SIZES: PaperSize[] = ['4x6', 'a6', 'a5', 'letter'];
+export const PAPER_SIZES: PaperSize[] = ['4x6', 'a6', 'a5', 'a4', 'letter'];
 
 // Physical page dimensions in portrait orientation — swapped for landscape.
 const PAGE_DIMENSIONS_MM: Record<PaperSize, { w: number; h: number }> = {
   '4x6': { w: 101.6, h: 152.4 },
   a6: { w: 105, h: 148 },
   a5: { w: 148, h: 210 },
+  a4: { w: 210, h: 297 },
   letter: { w: 215.9, h: 279.4 },
 };
 
 const PAGE_MARGIN_MM = 8;
 const CUT_LINE_GAP_MM = 6;
 
+// How many labels tile across vs. down one physical page. 2-per-page stays a
+// single column (stacked) to match the earlier landscape-reflow design;
+// 4/6-per-page tile into a real grid — mainly useful on sheet sizes (A4/
+// Letter/A5) where several smaller labels genuinely fit on one page, unlike
+// a 4x6 thermal roll label.
+const LABEL_GRID: Record<LabelsPerPage, { cols: number; rows: number }> = {
+  1: { cols: 1, rows: 1 },
+  2: { cols: 1, rows: 2 },
+  4: { cols: 2, rows: 2 },
+  6: { cols: 2, rows: 3 },
+};
+
 export function pageDimensions(paperSize: PaperSize, orientation: Orientation) {
   const { w, h } = PAGE_DIMENSIONS_MM[paperSize];
   return orientation === 'landscape' ? { w: h, h: w } : { w, h };
 }
 
-function labelContentHeightMm(paperSize: PaperSize, orientation: Orientation, labelsPerPage: LabelsPerPage) {
-  const { h } = pageDimensions(paperSize, orientation);
-  const usable = h - PAGE_MARGIN_MM * 2;
-  return labelsPerPage === 2 ? (usable - CUT_LINE_GAP_MM) / 2 : usable;
+function labelContentSizeMm(paperSize: PaperSize, orientation: Orientation, labelsPerPage: LabelsPerPage) {
+  const { w, h } = pageDimensions(paperSize, orientation);
+  const { cols, rows } = LABEL_GRID[labelsPerPage];
+  const usableW = w - PAGE_MARGIN_MM * 2 - (cols - 1) * CUT_LINE_GAP_MM;
+  const usableH = h - PAGE_MARGIN_MM * 2 - (rows - 1) * CUT_LINE_GAP_MM;
+  return { widthMm: usableW / cols, heightMm: usableH / rows };
 }
 
 export interface PrintOrder {
@@ -126,29 +141,29 @@ function addressLine(address: Record<string, unknown> | null | undefined): strin
 function WaybillLabel({
   order,
   heightMm,
-  compact,
-  landscape,
+  density,
+  reflow,
   company,
   onRendered,
 }: {
   order: PrintOrder;
   heightMm: number;
-  compact: boolean;
-  landscape: boolean;
+  density: 'normal' | 'compact' | 'tiny';
+  reflow: boolean;
   company?: { name: string; address: string | null };
   onRendered: () => void;
 }) {
   const items = Array.isArray(order.items) ? order.items : [];
-  const shrink = compact || landscape;
-  const barcodeHeight = shrink ? 40 : 64;
-  const barcodeFontSize = shrink ? 12 : 14;
-  const qrSize = shrink ? 88 : 128;
-  const textSize = shrink ? 'text-[11px]' : 'text-[13px]';
-  const labelSize = shrink ? 'text-[9px]' : 'text-[10px]';
-  const sectionPad = landscape ? 'py-1.5' : 'py-3';
+  const shrink = density !== 'normal';
+  const barcodeHeight = density === 'tiny' ? 28 : density === 'compact' ? 40 : 64;
+  const barcodeFontSize = density === 'tiny' ? 9 : density === 'compact' ? 12 : 14;
+  const qrSize = density === 'tiny' ? 56 : density === 'compact' ? 88 : 128;
+  const textSize = density === 'tiny' ? 'text-[8px]' : density === 'compact' ? 'text-[11px]' : 'text-[13px]';
+  const labelSize = density === 'tiny' ? 'text-[6px]' : density === 'compact' ? 'text-[9px]' : 'text-[10px]';
+  const sectionPad = density === 'tiny' ? 'py-1' : density === 'compact' ? 'py-1.5' : 'py-3';
 
   const header = (
-    <div className={`flex items-center justify-between border-b-2 border-black pb-2 ${landscape ? 'col-span-2' : ''}`}>
+    <div className={`flex items-center justify-between border-b-2 border-black pb-2 ${reflow ? 'col-span-2' : ''}`}>
       {courierLogo(order.courier) ? (
         // eslint-disable-next-line @next/next/no-img-element -- static SVG from /public, printed output doesn't benefit from next/image
         <img
@@ -182,7 +197,7 @@ function WaybillLabel({
   );
 
   const barcode = order.trackingNumber && (
-    <div className={`flex flex-col items-center border-b border-black ${sectionPad} ${landscape ? 'col-span-2' : ''}`}>
+    <div className={`flex flex-col items-center border-b border-black ${sectionPad} ${reflow ? 'col-span-2' : ''}`}>
       <BarcodeBlock
         value={getTrackingBarcodeValue(order.trackingNumber)}
         onRendered={onRendered}
@@ -198,7 +213,7 @@ function WaybillLabel({
   // confining it to half the page width let it visually overflow into the
   // neighboring column's text.
   const fromTo = (
-    <div className={`grid grid-cols-2 gap-3 border-b border-black ${sectionPad} ${landscape ? 'col-span-2' : ''}`}>
+    <div className={`grid grid-cols-2 gap-3 border-b border-black ${sectionPad} ${reflow ? 'col-span-2' : ''}`}>
       <div className="min-w-0">
         <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>From</p>
         {order.storeName || company ? (
@@ -242,7 +257,7 @@ function WaybillLabel({
   );
 
   const productDetails = items.length > 0 && (
-    <div className={landscape ? 'col-span-2 pt-1.5' : 'pt-3'}>
+    <div className={reflow ? 'col-span-2 pt-1.5' : shrink ? 'pt-1.5' : 'pt-3'}>
       <p className={`font-semibold tracking-wide text-gray-500 uppercase ${labelSize}`}>Product Details</p>
       <ul>
         {items.map((item, i) => (
@@ -256,10 +271,10 @@ function WaybillLabel({
 
   return (
     <div
-      className={`waybill-label font-sans ${textSize} leading-snug text-black ${landscape ? 'grid grid-cols-2 gap-x-4' : 'flex flex-col'}`}
+      className={`waybill-label font-sans ${textSize} leading-snug text-black ${reflow ? 'grid grid-cols-2 gap-x-4' : 'flex flex-col'}`}
       style={{ minHeight: `${heightMm}mm` }}
     >
-      {landscape ? (
+      {reflow ? (
         <>
           {header}
           {barcode}
@@ -349,8 +364,15 @@ export function PrintPreviewDocument({
     );
   }
 
-  const heightMm = labelContentHeightMm(paperSize, orientation, labelsPerPage);
+  const { heightMm } = labelContentSizeMm(paperSize, orientation, labelsPerPage);
   const { w: pageW, h: pageH } = pageDimensions(paperSize, orientation);
+  const { cols } = LABEL_GRID[labelsPerPage];
+  const density: 'normal' | 'compact' | 'tiny' = labelsPerPage === 1 ? 'normal' : labelsPerPage === 2 ? 'compact' : 'tiny';
+  // The header/barcode/from-to 2-column reflow only makes sense when a single
+  // label owns the whole landscape page width (1-2 per page). At 4/6 per page
+  // each cell is already narrow, so splitting it again would just reintroduce
+  // the barcode-overflow bug already fixed once for the 2-column case.
+  const reflow = orientation === 'landscape' && labelsPerPage <= 2;
   const pages: PrintOrder[][] = [];
   for (let i = 0; i < expandedOrders.length; i += labelsPerPage) {
     pages.push(expandedOrders.slice(i, i + labelsPerPage));
@@ -363,11 +385,25 @@ export function PrintPreviewDocument({
         <section
           key={pageIndex}
           className="print-section p-4"
-          style={{ width: `${pageW - PAGE_MARGIN_MM * 2}mm`, boxSizing: 'border-box' }}
+          style={
+            cols > 1
+              ? {
+                  width: `${pageW - PAGE_MARGIN_MM * 2}mm`,
+                  boxSizing: 'border-box',
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                  columnGap: `${CUT_LINE_GAP_MM}mm`,
+                  rowGap: `${CUT_LINE_GAP_MM}mm`,
+                }
+              : { width: `${pageW - PAGE_MARGIN_MM * 2}mm`, boxSizing: 'border-box' }
+          }
         >
           {page.map((order, i) => (
-            <div key={`${order.id}-${pageIndex}-${i}`}>
-              {i > 0 && (
+            <div
+              key={`${order.id}-${pageIndex}-${i}`}
+              className={cols > 1 && cutLine ? 'border border-dashed border-gray-400 p-1' : undefined}
+            >
+              {cols === 1 && i > 0 && (
                 <div
                   className={cutLine ? 'my-1 border-t border-dashed border-gray-400' : 'my-1'}
                   style={{ height: `${CUT_LINE_GAP_MM}mm` }}
@@ -378,8 +414,8 @@ export function PrintPreviewDocument({
               <WaybillLabel
                 order={order}
                 heightMm={heightMm}
-                compact={labelsPerPage === 2}
-                landscape={orientation === 'landscape'}
+                density={density}
+                reflow={reflow}
                 company={company}
                 onRendered={handleRendered}
               />
