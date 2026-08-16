@@ -1,6 +1,7 @@
 import { AppShell } from '@/components/app-shell';
 import { Card, CardContent } from '@/components/ui/card';
 import { PlatformIcon, type Platform } from '@/components/platform-icon';
+import { IntegrationConnectButton } from '@/components/integration-connect-button';
 import { db } from '@/db/client';
 import { stores } from '@/db/schema';
 import { safeQuery } from '@/lib/db/safe-query';
@@ -24,6 +25,7 @@ export default async function IntegrationsPage() {
   const demoMode = await getDemoMode();
   const allStores = demoMode === 'populated' && real.length === 0 ? MOCK_STORES : real;
   const shopifyConnected = allStores.some((store) => store.platform === 'shopify');
+  const storeByPlatform = new Map(allStores.map((store) => [store.platform, store]));
 
   return (
     <AppShell>
@@ -35,7 +37,8 @@ export default async function IntegrationsPage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {PLATFORMS.map((platform) => {
           const isShopify = platform.key === 'shopify';
-          const connected = isShopify && shopifyConnected;
+          const connectedStore = storeByPlatform.get(platform.key);
+          const connected = isShopify ? shopifyConnected : Boolean(connectedStore);
           return (
             <Card key={platform.key}>
               <CardContent className="flex items-start gap-4 py-5">
@@ -56,9 +59,11 @@ export default async function IntegrationsPage() {
                         </a>
                       )
                     ) : (
-                      <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                        Coming soon
-                      </span>
+                      <IntegrationConnectButton
+                        platform={platform.key as 'tiktok' | 'shopee' | 'lazada'}
+                        connected={connected}
+                        storeId={connectedStore?.id ?? null}
+                      />
                     )}
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">{platform.description}</p>

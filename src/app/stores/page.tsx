@@ -101,8 +101,11 @@ export default async function StoresPage() {
       )}
 
       <p className="mt-6 text-xs text-muted-foreground">
-        OmniShip currently supports one connected Shopify store. TikTok Shop and Shopee are planned for a future
-        update.
+        Order sync currently runs for Shopify only. Connect a TikTok Shop, Shopee, or Lazada store from{' '}
+        <a href="/integrations" className="text-primary hover:underline">
+          Integrations
+        </a>{' '}
+        — automatic order sync for those marketplaces is planned for a future update.
       </p>
     </AppShell>
   );
